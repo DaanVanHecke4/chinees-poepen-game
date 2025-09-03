@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chinees Poepen (lokale multiplayer-versie)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        .card {
+            width: 80px;
+            height: 110px;
+            background-color: #fff;
+            color: #000;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+            user-select: none;
+            cursor: pointer;
+        }
+        .card.interactive:hover {
+            transform: translateY(-10px);
+        }
+        .card.red {
+            color: #ef4444;
+        }
+        .card-top, .card-bottom {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+        .suit-icon {
+            font-size: 2.5rem;
+            line-height: 1;
+        }
+        .card-back {
+            width: 80px;
+            height: 110px;
+            background-color: #3b82f6;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            color: white;
+            transition: transform 0.2s;
+        }
+        @media (max-width: 640px) {
+            .card, .card-back {
+                width: 60px;
+                height: 90px;
+                font-size: 1rem;
+            }
+            .card-top, .card-bottom {
+                font-size: 1rem;
+            }
+            .suit-icon {
+                font-size: 2rem;
+            }
+        }
+        .scoreboard-container {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .player-hand {
+            opacity: 0.5;
+            transition: opacity 0.5s;
+        }
+        .player-hand.active {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex flex-col items-center min-h-screen">
+    <div id="loading-screen" class="flex flex-col items-center justify-center min-h-screen">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+        <p class="mt-4 text-gray-400">Initialiseren...</p>
+    </div>
+
+    <div id="auth-screen" class="bg-gray-800 p-6 md:p-8 rounded-xl shadow-lg w-full max-w-lg transition-opacity duration-500 hidden">
+        <h1 class="text-3xl font-bold text-center mb-6">Chinees Poepen</h1>
+        <div class="mb-4">
+            <label for="player-name-input" class="block text-sm font-medium text-gray-400 mb-2">Jouw naam:</label>
+            <input type="text" id="player-name-input" placeholder="Voer je naam in" class="w-full px-4 py-2 rounded-lg bg-gray-700 border-gray-600 focus:outline-none focus:ring focus:ring-blue-500">
+        </div>
+        <div class="space-y-4">
+            <button id="create-game-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors">Maak een nieuw spel aan</button>
+            <button id="join-game-btn" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition-colors">Sluit je aan bij een spel</button>
+        </div>
+        <div id="join-game-input-container" class="mt-4 space-y-2 hidden">
+            <label for="game-id-input" class="block text-sm font-medium text-gray-400">Spel ID:</label>
+            <input type="text" id="game-id-input" placeholder="Voer spel ID in" class="w-full px-4 py-2 rounded-lg bg-gray-700 border-gray-600 focus:outline-none focus:ring focus:ring-purple-500">
+            <button id="submit-join-btn" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition-colors">Sluit aan</button>
+        </div>
+        <p id="local-user-id" class="text-xs text-center mt-4 text-gray-500"></p>
+    </div>
+
+    <div id="lobby-screen" class="hidden w-full max-w-lg mt-8 bg-gray-800 p-6 rounded-xl shadow-lg">
+        <h2 class="text-2xl font-bold text-center mb-4">Wachten op spelers...</h2>
+        <p class="text-center mb-4">Spel ID: <span id="lobby-game-id" class="font-bold text-green-400"></span></p>
+        <p class="text-sm text-center text-gray-400 mb-4">Deel dit ID met je vrienden om ze te laten meedoen.</p>
+        <div id="lobby-players-list" class="space-y-2 mb-6">
+            <!-- Lijst van spelers in de lobby -->
+        </div>
+        <button id="start-lobby-btn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors">Start Spel</button>
+    </div>
+
+    <div id="game-screen" class="hidden w-full max-w-6xl mt-8">
+        <div class="flex justify-between items-center mb-4">
+            <div class="flex-1 text-left">
+                <h2 class="text-2xl font-bold">Ronde: <span id="round-number">1</span></h2>
+            </div>
+            <div class="flex-1 text-center">
+                <div class="text-sm">Troefkaart</div>
+                <div id="trump-card-container" class="card mx-auto"></div>
+            </div>
+            <div class="flex-1 text-right">
+                <button id="end-game-btn" class="bg-red-600 text-white text-sm py-2 px-4 rounded-lg hover:bg-red-700 transition-colors hidden">Beëindig Spel</button>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 p-4 rounded-xl shadow-md mb-6">
+            <div id="message-display" class="text-center font-bold text-lg mb-2"></div>
+            <div class="flex justify-center space-x-2 md:space-x-4 h-32 md:h-40 relative">
+                <div id="trick-cards-container" class="flex items-center space-x-2 md:space-x-4">
+                    <!-- Gespeelde kaarten komen hier -->
+                </div>
+            </div>
+        </div>
+        
+        <div id="player-hands-container" class="flex flex-col items-center gap-4">
+            <!-- Spelershanden worden hier getoond -->
+        </div>
+        
+        <!-- Modaal voor inzetten -->
+        <div id="betting-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden">
+            <div class="bg-gray-800 p-6 rounded-xl shadow-lg w-full max-w-lg">
+                <h3 id="betting-title" class="text-xl font-bold mb-4 text-center"></h3>
+                <div id="betting-cards" class="flex flex-wrap justify-center gap-4 mb-6">
+                    <!-- Kaarten van de speler worden hier dynamisch toegevoegd -->
+                </div>
+                <div class="flex justify-center space-x-4 mb-4">
+                    <!-- Gok-knoppen worden hier dynamisch toegevoegd -->
+                </div>
+                <p id="betting-info" class="text-center text-sm text-gray-400"></p>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-gray-800 p-4 rounded-xl shadow-md">
+            <h3 class="text-2xl font-bold mb-4 text-center">Scorebord</h3>
+            <div class="scoreboard-container">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-700">
+                        <tr>
+                            <th class="py-2 px-3 text-left text-xs font-semibold uppercase tracking-wider">Speler</th>
+                            <th class="py-2 px-3 text-center text-xs font-semibold uppercase tracking-wider">Gok</th>
+                            <th class="py-2 px-3 text-center text-xs font-semibold uppercase tracking-wider">Slagen</th>
+                            <th class="py-2 px-3 text-right text-xs font-semibold uppercase tracking-wider">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="score-table-body" class="divide-y divide-gray-700">
+                        <!-- Score-rijen worden hier toegevoegd -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const suits = ['harten', 'ruiten', 'klaveren', 'schoppen'];
+        const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        const suitSymbols = {
+            'harten': '♥', 'ruiten': '♦', 'klaveren': '♣', 'schoppen': '♠'
+        };
+
+        // UI-elementen
+        const loadingScreen = document.getElementById('loading-screen');
+        const authScreen = document.getElementById('auth-screen');
+        const lobbyScreen = document.getElementById('lobby-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const playerNameInput = document.getElementById('player-name-input');
+        const createGameBtn = document.getElementById('create-game-btn');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const joinGameInputContainer = document.getElementById('join-game-input-container');
+        const gameIdInput = document.getElementById('game-id-input');
+        const submitJoinBtn = document.getElementById('submit-join-btn');
+        const lobbyGameIdSpan = document.getElementById('lobby-game-id');
+        const lobbyPlayersList = document.getElementById('lobby-players-list');
+        const startLobbyBtn = document.getElementById('start-lobby-btn');
+        const localUserIdSpan = document.getElementById('local-user-id');
+        const bettingModal = document.getElementById('betting-modal');
+        const bettingTitle = document.getElementById('betting-title');
+        const bettingCardsContainer = document.getElementById('betting-cards');
+        const bettingInfo = document.getElementById('betting-info');
+        const roundNumberSpan = document.getElementById('round-number');
+        const trumpCardContainer = document.getElementById('trump-card-container');
+        const playerHandsContainer = document.getElementById('player-hands-container');
+        const trickCardsContainer = document.getElementById('trick-cards-container');
+        const scoreTableBody = document.getElementById('score-table-body');
+        const messageDisplay = document.getElementById('message-display');
+
+        // Spelvariabelen
+        const LOCAL_STORAGE_KEY = 'chinees_poepen_game';
+        let localUserId = 'guest_' + Math.random().toString(36).substring(2, 10);
+        let gameId = null;
+        let gameState = null;
+
+        // Functie voor aanmaken en meedoen aan games
+        createGameBtn.addEventListener('click', () => {
+            const name = playerNameInput.value.trim();
+            if (!name) {
+                showMessage("Voer een naam in om een spel te maken.", "error");
+                return;
+            }
+            gameId = crypto.randomUUID();
+            localUserId = crypto.randomUUID();
+            const player = { playerId: localUserId, name, score: 0 };
+            gameState = {
+                gameId,
+                status: 'lobby',
+                players: [player],
+                round: 0,
+                trump_card: null,
+                hands: {},
+                round_sequence: [],
+                round_index: 0,
+                current_player: null,
+                trick_cards: [],
+                tricks_won: {},
+                round_bets: {},
+                lastTrickWinner: null
+            };
+            saveGameState();
+            updateUI();
+        });
+
+        joinGameBtn.addEventListener('click', () => {
+            joinGameInputContainer.classList.toggle('hidden');
+        });
+
+        submitJoinBtn.addEventListener('click', () => {
+            const name = playerNameInput.value.trim();
+            const joinId = gameIdInput.value.trim();
+            if (!name || !joinId) {
+                showMessage("Voer je naam en het spel-ID in.", "error");
+                return;
+            }
+
+            const savedState = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY));
+            if (savedState && savedState.gameId === joinId) {
+                gameState = savedState;
+                if (gameState.status !== 'lobby') {
+                    showMessage("Spel is al begonnen.", "error");
+                    return;
+                }
+                const player = { playerId: localUserId, name, score: 0 };
+                gameState.players.push(player);
+                gameId = joinId;
+                saveGameState();
+                updateUI();
+            } else {
+                showMessage("Spel niet gevonden.", "error");
+            }
+        });
+
+        startLobbyBtn.addEventListener('click', () => {
+            if (gameState.players.length < 3) {
+                showMessage("Je hebt minimaal 3 spelers nodig om te starten.", "error");
+                return;
+            }
+            startGame();
+        });
+
+        // Functies voor de spelweergave en logica
+        function saveGameState() {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(gameState));
+        }
+
+        function loadGameState() {
+            const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (savedState) {
+                gameState = JSON.parse(savedState);
+            }
+        }
+
+        function updateUI() {
+            if (!gameState) {
+                authScreen.classList.remove('hidden');
+                lobbyScreen.classList.add('hidden');
+                gameScreen.classList.add('hidden');
+                localUserIdSpan.textContent = `Jouw ID: ${localUserId}`;
+                return;
+            }
+
+            if (gameState.status === 'lobby') {
+                authScreen.classList.add('hidden');
+                gameScreen.classList.add('hidden');
+                lobbyScreen.classList.remove('hidden');
+                lobbyGameIdSpan.textContent = gameState.gameId;
+                lobbyPlayersList.innerHTML = '';
+                gameState.players.forEach(p => {
+                    const li = document.createElement('div');
+                    li.className = 'bg-gray-700 p-2 rounded-lg text-center';
+                    li.textContent = p.name;
+                    lobbyPlayersList.appendChild(li);
+                });
+                startLobbyBtn.classList.add('hidden');
+                if (gameState.players[0].playerId === localUserId) {
+                    startLobbyBtn.classList.remove('hidden');
+                }
+            } else {
+                lobbyScreen.classList.add('hidden');
+                authScreen.classList.add('hidden');
+                gameScreen.classList.remove('hidden');
+                renderGame(gameState);
+            }
+        }
+
+        function startGame() {
+            gameState.status = 'playing';
+            gameState.round = 1;
+            gameState.round_sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+            gameState.round_index = 0;
+            gameState.players.forEach(p => p.score = 0);
+            startRound();
+        }
+
+        function startRound() {
+            const numCards = gameState.round_sequence[gameState.round_index];
+            if (numCards === undefined) {
+                endGame();
+                return;
+            }
+            
+            const deck = createDeck();
+            const shuffledDeck = shuffleDeck(deck);
+            
+            gameState.hands = {};
+            gameState.tricks_won = {};
+            gameState.round_bets = {};
+            gameState.current_player = gameState.players[0].playerId; // Start met de eerste speler
+            gameState.trick_cards = [];
+            
+            gameState.players.forEach(p => {
+                gameState.hands[p.playerId] = [];
+                gameState.tricks_won[p.playerId] = 0;
+                gameState.round_bets[p.playerId] = null;
+            });
+            
+            for (let i = 0; i < numCards; i++) {
+                gameState.players.forEach(p => {
+                    gameState.hands[p.playerId].push(shuffledDeck.pop());
+                });
+            }
+            
+            gameState.trump_card = shuffledDeck.pop();
+            
+            showMessage(`Ronde ${gameState.round}: ${numCards} kaarten. Tijd om te gokken!`);
+            saveGameState();
+            updateUI();
+        }
+
+        function endGame() {
+            gameState.status = 'ended';
+            showMessage("Spel voorbij! Bekijk het scorebord voor de winnaar.");
+            saveGameState();
+            updateUI();
+        }
+
+        function createDeck() {
+            const deck = [];
+            for (const suit of suits) {
+                for (const rank of ranks) {
+                    deck.push({ suit, rank });
+                }
+            }
+            return deck;
+        }
+
+        function shuffleDeck(deck) {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        function renderGame(state) {
+            roundNumberSpan.textContent = state.round;
+            
+            trumpCardContainer.innerHTML = '';
+            if (state.trump_card) {
+                trumpCardContainer.appendChild(createCardElement(state.trump_card));
+            }
+            
+            trickCardsContainer.innerHTML = '';
+            state.trick_cards.forEach(tc => {
+                const cardEl = createCardElement(tc.card);
+                const playerEl = document.createElement('div');
+                playerEl.className = 'text-xs text-center mt-1';
+                playerEl.textContent = tc.playerName;
+                const cardWrapper = document.createElement('div');
+                cardWrapper.className = 'flex flex-col items-center';
+                cardWrapper.appendChild(cardEl);
+                cardWrapper.appendChild(playerEl);
+                trickCardsContainer.appendChild(cardWrapper);
+            });
+
+            playerHandsContainer.innerHTML = '';
+            state.players.forEach((p) => {
+                const handContainer = document.createElement('div');
+                handContainer.id = `hand-of-${p.playerId}`;
+                handContainer.setAttribute('data-player-id', p.playerId);
+                handContainer.className = `player-hand w-full flex flex-col items-center p-2 rounded-xl bg-gray-700 shadow-inner ${state.current_player === p.playerId ? 'active' : ''}`;
+                
+                const playerName = document.createElement('div');
+                playerName.className = 'font-bold text-center mb-2';
+                playerName.textContent = p.name + (p.playerId === localUserId ? ' (Jij)' : '');
+                handContainer.appendChild(playerName);
+                
+                const cardsContainer = document.createElement('div');
+                cardsContainer.className = 'flex flex-wrap justify-center gap-2';
+                
+                const privateHand = gameState.hands[p.playerId] || [];
+                
+                if (p.playerId === localUserId) {
+                    privateHand.forEach(card => {
+                        const cardEl = createCardElement(card);
+                        cardEl.classList.add('interactive');
+                        cardEl.onclick = () => handleCardPlay(card);
+                        cardsContainer.appendChild(cardEl);
+                    });
+                } else {
+                    for (let i = 0; i < privateHand.length; i++) {
+                        const cardBackEl = document.createElement('div');
+                        cardBackEl.className = 'card-back';
+                        cardBackEl.textContent = `(Kaart)`
+                        cardsContainer.appendChild(cardBackEl);
+                    }
+                }
+                handContainer.appendChild(cardsContainer);
+                playerHandsContainer.appendChild(handContainer);
+            });
+
+            scoreTableBody.innerHTML = '';
+            state.players.forEach(p => {
+                const bet = state.round_bets[p.playerId] !== null ? state.round_bets[p.playerId] : '-';
+                const tricks = state.tricks_won[p.playerId] !== null ? state.tricks_won[p.playerId] : '-';
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-700 transition-colors';
+                row.innerHTML = `
+                    <td class="py-2 px-3 text-sm text-left font-medium whitespace-nowrap">${p.name}</td>
+                    <td class="py-2 px-3 text-sm text-center">${bet}</td>
+                    <td class="py-2 px-3 text-sm text-center">${tricks}</td>
+                    <td class="py-2 px-3 text-sm text-right font-bold">${p.score}</td>
+                `;
+                scoreTableBody.appendChild(row);
+            });
+            
+            checkGameState();
+        }
+
+        function checkGameState() {
+            if (!gameState) return;
+
+            const myPlayerId = localUserId;
+            const currentPlayer = gameState.players.find(p => p.playerId === gameState.current_player);
+            
+            if (gameState.status === 'playing' && gameState.round_bets[myPlayerId] === null && gameState.current_player === myPlayerId) {
+                handleBettingPhase();
+            } else if (gameState.status === 'playing') {
+                showMessage(`Het is de beurt van ${currentPlayer.name}.`);
+                if (gameState.current_player === myPlayerId) {
+                    showMessage(`Het is jouw beurt, ${currentPlayer.name}!`);
+                }
+            }
+        }
+
+        function handleBettingPhase() {
+            bettingModal.classList.remove('hidden');
+            
+            const myHand = gameState.hands[localUserId] || [];
+            bettingTitle.textContent = `${gameState.players.find(p => p.playerId === localUserId).name}, gok slagen:`;
+            bettingCardsContainer.innerHTML = '';
+            myHand.forEach(card => {
+                const cardEl = createCardElement(card);
+                bettingCardsContainer.appendChild(cardEl);
+            });
+
+            const betButtonsContainer = bettingModal.querySelector('.space-x-4');
+            betButtonsContainer.innerHTML = '';
+
+            const totalBets = Object.values(gameState.round_bets).filter(b => b !== null).reduce((sum, bet) => sum + bet, 0);
+            const isLastPlayer = Object.values(gameState.round_bets).filter(b => b !== null).length === gameState.players.length - 1;
+            const forbiddenBet = isLastPlayer ? gameState.round_sequence[gameState.round_index] - totalBets : -1;
+            
+            bettingInfo.textContent = `Totaal gegokt: ${totalBets}/${gameState.round_sequence[gameState.round_index]}`;
+            if (isLastPlayer) {
+                bettingInfo.textContent += ` (Kan niet ${forbiddenBet} gokken)`;
+            }
+
+            const betOptions = Array.from({ length: gameState.round_sequence[gameState.round_index] + 1 }, (_, j) => j);
+
+            betOptions.forEach(bet => {
+                const btn = document.createElement('button');
+                btn.className = 'bet-option bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg';
+                if (bet === forbiddenBet) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                btn.textContent = bet;
+                btn.onclick = () => {
+                    gameState.round_bets[localUserId] = bet;
+                    bettingModal.classList.add('hidden');
+                    saveGameState();
+                    nextPlayer();
+                };
+                betButtonsContainer.appendChild(btn);
+            });
+        }
+        
+        function handleCardPlay(card) {
+            if (gameState.current_player !== localUserId) return;
+            
+            const leadSuit = gameState.trick_cards.length > 0 ? gameState.trick_cards[0].card.suit : null;
+            const myHand = gameState.hands[localUserId] || [];
+            const hasLeadSuit = myHand.some(c => c.suit === leadSuit);
+            
+            if (leadSuit && hasLeadSuit && card.suit !== leadSuit) {
+                showMessage("Je moet de juiste soort kaart volgen.", "error");
+                return;
+            }
+            
+            // Verwijder de gespeelde kaart uit de hand
+            const cardIndex = myHand.findIndex(c => c.suit === card.suit && c.rank === card.rank);
+            if (cardIndex > -1) {
+                myHand.splice(cardIndex, 1);
+            }
+            gameState.hands[localUserId] = myHand;
+
+            // Voeg de kaart toe aan de slag
+            const currentPlayer = gameState.players.find(p => p.playerId === localUserId);
+            gameState.trick_cards.push({ card, playerName: currentPlayer.name });
+            
+            saveGameState();
+            nextPlayer();
+        }
+
+        function nextPlayer() {
+            const currentPlayerIndex = gameState.players.findIndex(p => p.playerId === gameState.current_player);
+            const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.length;
+            gameState.current_player = gameState.players[nextPlayerIndex].playerId;
+            saveGameState();
+
+            if (gameState.trick_cards.length === gameState.players.length) {
+                setTimeout(endTrick, 1500); // Wacht 1.5s om de kaarten te bekijken
+            }
+        }
+
+        function endTrick() {
+            const leadCard = gameState.trick_cards[0].card;
+            const trumpSuit = gameState.trump_card.suit;
+            const rankOrder = ranks.reduce((obj, r, i) => ({ ...obj, [r]: i }), {});
+
+            let winningCard = gameState.trick_cards[0].card;
+            let winningPlayer = gameState.trick_cards[0].playerName;
+
+            for (let i = 1; i < gameState.trick_cards.length; i++) {
+                const currentCard = gameState.trick_cards[i].card;
+                if (currentCard.suit === trumpSuit && winningCard.suit !== trumpSuit) {
+                    winningCard = currentCard;
+                    winningPlayer = gameState.trick_cards[i].playerName;
+                } else if (currentCard.suit === trumpSuit && winningCard.suit === trumpSuit) {
+                    if (rankOrder[currentCard.rank] > rankOrder[winningCard.rank]) {
+                        winningCard = currentCard;
+                        winningPlayer = gameState.trick_cards[i].playerName;
+                    }
+                } else if (currentCard.suit === leadCard.suit && winningCard.suit === leadCard.suit) {
+                    if (rankOrder[currentCard.rank] > rankOrder[winningCard.rank]) {
+                        winningCard = currentCard;
+                        winningPlayer = gameState.trick_cards[i].playerName;
+                    }
+                }
+            }
+
+            const winningPlayerId = gameState.players.find(p => p.name === winningPlayer).playerId;
+            gameState.tricks_won[winningPlayerId]++;
+            gameState.current_player = winningPlayerId; // De winnaar van de slag leidt de volgende
+            gameState.trick_cards = [];
+            
+            saveGameState();
+            
+            if (Object.values(gameState.hands).every(hand => hand.length === 0)) {
+                endRound();
+            } else {
+                updateUI();
+            }
+        }
+
+        function endRound() {
+            gameState.players.forEach(p => {
+                const bet = gameState.round_bets[p.playerId];
+                const tricks = gameState.tricks_won[p.playerId];
+                if (bet === tricks) {
+                    p.score += 10 + (bet * 5);
+                }
+            });
+            
+            gameState.round++;
+            gameState.round_index++;
+            
+            saveGameState();
+
+            if (gameState.round_index >= gameState.round_sequence.length) {
+                endGame();
+            } else {
+                showMessage("Ronde voorbij. Nieuwe ronde begint over 5 seconden...");
+                setTimeout(startRound, 5000);
+            }
+        }
+
+        function createCardElement(card) {
+            const cardEl = document.createElement('div');
+            cardEl.className = `card ${card.suit === 'harten' || card.suit === 'ruiten' ? 'red' : ''}`;
+            cardEl.innerHTML = `
+                <div class="card-top p-1">${card.rank}</div>
+                <div class="suit-icon">${suitSymbols[card.suit]}</div>
+                <div class="card-bottom p-1">${card.rank}</div>
+            `;
+            cardEl.setAttribute('data-suit', card.suit);
+            cardEl.setAttribute('data-rank', card.rank);
+            return cardEl;
+        }
+
+        function showMessage(text, type = 'info') {
+            messageDisplay.textContent = text;
+            messageDisplay.className = `text-center font-bold text-lg mb-2`;
+            if (type === 'error') {
+                messageDisplay.classList.add('text-red-400');
+            } else {
+                messageDisplay.classList.add('text-green-400');
+            }
+        }
+
+        // Start de app-initialisatie bij het laden van de pagina
+        window.onload = function() {
+            loadingScreen.classList.add('hidden');
+            loadGameState();
+            updateUI();
+            // Start de lokale game loop om de UI bij te werken
+            setInterval(() => {
+                updateUI();
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
