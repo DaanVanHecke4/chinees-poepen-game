@@ -20,6 +20,9 @@ const io = new Server(server, {
   },
 });
 
+// Log de database-URL
+console.log('DATABASE_URL:', process.env.DATABASE_URL);
+
 // Databaseverbinding met Neon DB
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
