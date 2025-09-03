@@ -34,10 +34,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 // API-route om een nieuw spel aan te maken
 app.post('/api/create-game', async (req, res) => {
     try {
-        const { username } = req.body;
+        const { username, socketId } = req.body;
         const gameId = Math.random().toString(36).substring(2, 8).toUpperCase();
         const client = await pool.connect();
-        const result = await client.query('INSERT INTO games (game_id, players) VALUES ($1, $2) RETURNING *', [gameId, JSON.stringify([{ id: socket.id, username }])]);
+        const result = await client.query('INSERT INTO games (game_id, players) VALUES ($1, $2) RETURNING *', [gameId, JSON.stringify([{ id: socketId, username }])]);
         client.release();
         res.status(201).json({ success: true, gameId });
     } catch (error) {
@@ -49,7 +49,7 @@ app.post('/api/create-game', async (req, res) => {
 // API-route om je aan te sluiten bij een spel
 app.post('/api/join-game', async (req, res) => {
     try {
-        const { gameId, username } = req.body;
+        const { gameId, username, socketId } = req.body;
         const client = await pool.connect();
         const game = await client.query('SELECT * FROM games WHERE game_id = $1', [gameId]);
         
@@ -64,7 +64,7 @@ app.post('/api/join-game', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Spel is vol' });
         }
 
-        const newPlayer = { id: socket.id, username };
+        const newPlayer = { id: socketId, username };
         players.push(newPlayer);
 
         await client.query('UPDATE games SET players = $1 WHERE game_id = $2', [JSON.stringify(players), gameId]);
