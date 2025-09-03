@@ -98,8 +98,7 @@
 
         const socket = io(RENDER_URL, {
             path: '/socket.io/',
-            transports: ['websocket'],
-            upgrade: false
+            transports: ['websocket']
         });
 
         const usernameInput = document.getElementById('usernameInput');
@@ -114,17 +113,26 @@
         async function createNewGame() {
             const username = usernameInput.value || `Gast_${Math.random().toString(36).substr(2, 9)}`;
             console.log("Nieuw spel aanmaken als:", username);
-            const response = await fetch(`${RENDER_URL}/api/create-game`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ username })
-            });
-            const data = await response.json();
-            if (data.gameId) {
-                showMessage(`Spel aangemaakt! Deel deze ID: ${data.gameId}`);
-                joinGame(data.gameId, username);
+            try {
+                const response = await fetch(`${RENDER_URL}/api/create-game`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    mode: 'cors',
+                    body: JSON.stringify({ username, socketId: socket.id })
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                if (data.gameId) {
+                    showMessage(`Spel aangemaakt! Deel deze ID: ${data.gameId}`);
+                    joinGame(data.gameId, username);
+                }
+            } catch (error) {
+                console.error('Fout bij het aanmaken van een spel:', error);
+                showMessage(`Fout: ${error.message}`);
             }
         }
 
@@ -138,20 +146,29 @@
             }
 
             console.log(`Deelnemen aan spel ${gameId} als ${username}`);
-            const response = await fetch(`${RENDER_URL}/api/join-game`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ gameId, username })
-            });
-            const data = await response.json();
+            try {
+                const response = await fetch(`${RENDER_URL}/api/join-game`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    mode: 'cors',
+                    body: JSON.stringify({ gameId, username, socketId: socket.id })
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
 
-            if (data.success) {
-                showMessage(`Succesvol aangesloten bij spel ${gameId}!`);
-                // Hier zou je de logica toevoegen om naar het spelbord te gaan
-            } else {
-                showMessage(data.message);
+                if (data.success) {
+                    showMessage(`Succesvol aangesloten bij spel ${gameId}!`);
+                    // Hier zou je de logica toevoegen om naar het spelbord te gaan
+                } else {
+                    showMessage(data.message);
+                }
+            } catch (error) {
+                console.error('Fout bij het aansluiten bij een spel:', error);
+                showMessage(`Fout: ${error.message}`);
             }
         }
         
