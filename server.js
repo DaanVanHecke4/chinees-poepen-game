@@ -28,16 +28,6 @@ const pool = new Pool({
   }
 });
 
-// Test de databaseverbinding
-async function testDbConnection() {
-  try {
-    await pool.query('SELECT 1');
-    console.log('Verbonden met de Neon database!');
-  } catch (err) {
-    console.error('Fout bij het verbinden met de database:', err);
-  }
-}
-
 // Initialiseer de database
 async function initDb() {
   try {
@@ -61,7 +51,6 @@ async function initDb() {
 }
 
 // Roep de functies aan bij het opstarten
-testDbConnection();
 initDb();
 
 // API-route om een nieuw spel aan te maken
