@@ -4,6 +4,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const http = require('http');
 const socketIo = require('socket.io');
+const cors = require('cors'); // Voeg de cors-bibliotheek toe
 
 const app = express();
 const server = http.createServer(app);
@@ -14,6 +15,9 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware om JSON-body's te parseren
 app.use(express.json());
+
+// Schakel CORS-middleware in voor alle verzoeken
+app.use(cors());
 
 // Configuratie voor de PostgreSQL-database
 const pool = new Pool({
