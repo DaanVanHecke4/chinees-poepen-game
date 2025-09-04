@@ -94,6 +94,7 @@
     </div>
 
     <script>
+        // Gebruik de live URL van je Render-service hier
         const RENDER_URL = "https://chinees-poepen-game.onrender.com";
 
         const socket = io(RENDER_URL, {
@@ -113,22 +114,34 @@
         async function createNewGame() {
             const username = usernameInput.value || `Gast_${Math.random().toString(36).substr(2, 9)}`;
             console.log("Nieuw spel aanmaken als:", username);
+            const requestBody = { player_host_name: username, socket_id: socket.id };
+            console.log("Verzenden van data:", requestBody);
             try {
                 const response = await fetch(`${RENDER_URL}/api/create-game`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    mode: 'cors',
-                    body: JSON.stringify({ username, socketId: socket.id })
+                    body: JSON.stringify(requestBody)
                 });
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    console.error('Ontvangen fout van server:', response.status, response.statusText);
+                    let errorMessage = `HTTP error! status: ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage += ` - ${errorData.message}`;
+                        console.error('Serverfoutdetails:', errorData);
+                    } catch (e) {
+                        console.error('Kon serverfoutdetails niet parsen:', e);
+                    }
+                    throw new Error(errorMessage);
                 }
                 const data = await response.json();
-                if (data.gameId) {
-                    showMessage(`Spel aangemaakt! Deel deze ID: ${data.gameId}`);
-                    joinGame(data.gameId, username);
+                if (data.game) {
+                    console.log('Spel aangemaakt met ID:', data.game.game_id);
+                    showMessage(`Spel aangemaakt! Deel deze ID: ${data.game.game_id}`);
+                    // Aansluiten bij het zojuist aangemaakte spel
+                    joinGame(data.game.game_id, username);
                 }
             } catch (error) {
                 console.error('Fout bij het aanmaken van een spel:', error);
@@ -152,11 +165,18 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    mode: 'cors',
-                    body: JSON.stringify({ gameId, username, socketId: socket.id })
+                    body: JSON.stringify({ game_id: gameId, player_join_name: username, socket_id: socket.id })
                 });
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    let errorMessage = `HTTP error! status: ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage += ` - ${errorData.message}`;
+                        console.error('Serverfoutdetails:', errorData);
+                    } catch (e) {
+                        console.error('Kon serverfoutdetails niet parsen:', e);
+                    }
+                    throw new Error(errorMessage);
                 }
                 const data = await response.json();
 
