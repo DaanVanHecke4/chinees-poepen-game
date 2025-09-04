@@ -1,16 +1,16 @@
 {
-"name": "chineespoepen-game",
-"version": "1.0.0",
-"description": "A multiplayer game of Chinees Poepen.",
-"main": "server.js",
-"scripts": {
-"start": "node server.js"
-"build": "echo 'Geen build nodig, bestanden zijn statisch' && exit 0"
-},
-"dependencies": {
-"cors": "^2.8.5",
-"express": "^4.19.2",
-"pg": "^8.12.0",
-"socket.io": "^4.7.5"
-}
+  "name": "chineespoepen-game",
+  "version": "1.0.0",
+  "description": "A multiplayer game of Chinees Poepen.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "echo 'Geen build nodig, bestanden zijn statisch' && exit 0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "socket.io": "^4.7.5"
+  }
 }
