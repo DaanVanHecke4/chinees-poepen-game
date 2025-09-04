@@ -1,107 +1,84 @@
-// Import necessary modules
+// Bestand: server.js
+// Deze server is geschreven in Node.js met Express en socket.io
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
 const { Pool } = require('pg');
-const cors = require('cors');
+const http = require('http');
+const socketIo = require('socket.io');
 
-// Initialize Express app and HTTP server
 const app = express();
 const server = http.createServer(app);
+const io = socketIo(server);
 
-// Use CORS for cross-origin requests
-app.use(cors());
+// Zorg ervoor dat de poort van de omgeving wordt gebruikt
+const PORT = process.env.PORT || 3000;
+
+// Middleware om JSON-body's te parseren
 app.use(express.json());
 
-// Initialize Socket.IO server with CORS options
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
-
-// Configure PostgreSQL connection pool
-// IMPORTANT: The `DATABASE_URL` environment variable is automatically provided by Render.com
-// We've also added the `ssl` option for secure connections to NeonDB.
+// Configuratie voor de PostgreSQL-database
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
-// Test the database connection
-pool.connect()
-    .then(client => {
-        console.log("Database connection successful!");
-        client.release();
-    })
-    .catch(err => {
-        console.error("Database connection failed:", err.stack);
-    });
-
-// API endpoint to create a new game
-app.post('/api/create-game', async (req, res) => {
-    const { player_host_name, socket_id } = req.body;
-    console.log(`Received request to create game for player: ${player_host_name}`);
-    console.log(`Socket ID: ${socket_id}`);
-
-    try {
-        const game_id = Math.random().toString(36).substring(2, 8).toUpperCase();
-        console.log(`Generated Game ID: ${game_id}`);
-
-        // Insert new game into the database
-        const result = await pool.query(
-            'INSERT INTO games(game_id, player_host_name, player_host_socket, status) VALUES($1, $2, $3, $4) RETURNING *',
-            [game_id, player_host_name, socket_id, 'waiting']
-        );
-
-        console.log("Game created successfully in DB:", result.rows[0]);
-        res.status(201).json({ success: true, game: result.rows[0] });
-    } catch (err) {
-        console.error("Error creating game:", err);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
-    }
+// Endpoint om een nieuw spel te maken
+app.post('/games', async (req, res) => {
+  const { playerHost, gameId } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO games (game_id, player_host) VALUES ($1, $2) RETURNING *',
+      [gameId, playerHost]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Fout bij het maken van het spel:', err);
+    res.status(500).json({ error: 'Interne serverfout' });
+  }
 });
 
-// API endpoint to join a game
-app.post('/api/join-game', async (req, res) => {
-    const { game_id, player_join_name, socket_id } = req.body;
-    console.log(`Received request to join game ${game_id} for player: ${player_join_name}`);
-    console.log(`Socket ID: ${socket_id}`);
-
-    try {
-        // Find the game and update with the second player's info
-        const result = await pool.query(
-            'UPDATE games SET player_join_name = $1, player_join_socket = $2, status = $3 WHERE game_id = $4 AND status = $5 RETURNING *',
-            [player_join_name, socket_id, 'ready', game_id, 'waiting']
-        );
-
-        if (result.rows.length > 0) {
-            console.log("Player joined game successfully:", result.rows[0]);
-            res.status(200).json({ success: true, game: result.rows[0] });
-        } else {
-            console.warn(`Could not join game ${game_id}. Game may be full or not exist.`);
-            res.status(404).json({ success: false, message: 'Game not found or is already full.' });
-        }
-    } catch (err) {
-        console.error("Error joining game:", err);
-        res.status(500).json({ success: false, message: 'Internal Server Error' });
-    }
+// Endpoint om een speler toe te voegen aan een spel
+app.post('/games/:gameId/join', async (req, res) => {
+  const { gameId } = req.params;
+  const { playerId } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO game_players (game_id, player_id) VALUES ($1, $2) RETURNING *',
+      [gameId, playerId]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Fout bij het toevoegen van een speler aan het spel:', err);
+    res.status(500).json({ error: 'Interne serverfout' });
+  }
 });
 
-// Socket.IO connection handling
+// Luisteren naar socket.io-verbindingen
 io.on('connection', (socket) => {
-    console.log(`A user connected with socket ID: ${socket.id}`);
+  console.log('Een gebruiker is verbonden');
 
-    socket.on('disconnect', () => {
-        console.log(`User disconnected with socket ID: ${socket.id}`);
-    });
+  // Deelnemen aan een spel
+  socket.on('joinGame', (gameId) => {
+    socket.join(gameId);
+    console.log(`Gebruiker ${socket.id} is toegetreden tot spel ${gameId}`);
+  });
+
+  // Een zet plaatsen
+  socket.on('makeMove', ({ gameId, move }) => {
+    // Hier moet de spel-logica komen
+    console.log(`Zet ontvangen in spel ${gameId}:`, move);
+    // Uitzenden naar alle spelers in het spel
+    io.to(gameId).emit('updateGame', move);
+  });
+
+  // Ontkoppelen
+  socket.on('disconnect', () => {
+    console.log('Een gebruiker is ontkoppeld');
+  });
 });
 
-// Start the server
-const PORT = process.env.PORT || 3000;
+// Start de server
 server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Server draait op poort ${PORT}`);
 });
