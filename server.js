@@ -25,10 +25,7 @@ console.log('DATABASE_URL:', process.env.DATABASE_URL);
 
 // Databaseverbinding met Neon DB
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  connectionString: process.env.DATABASE_URL + '?sslmode=require'
 });
 
 // Initialiseer de database
