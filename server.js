@@ -126,8 +126,9 @@ app.post('/games/:game_id/start', async (req, res) => {
         const playersResult = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1', [game_id]);
         const players = playersResult.rows.map(row => row.player_id);
         const playerCount = players.length;
-        if (playerCount < 2) {
-            return res.status(400).json({ error: 'Niet genoeg spelers om te starten. Minimaal 2 spelers nodig.' });
+        // Correctie: check op minimaal 3 spelers
+        if (playerCount < 3) {
+            return res.status(400).json({ error: 'Niet genoeg spelers om te starten. Minimaal 3 spelers nodig.' });
         }
 
         const maxRounds = Math.floor(52 / playerCount);
@@ -149,7 +150,6 @@ app.post('/games/:game_id/start', async (req, res) => {
             isBiddingPhase: true
         };
 
-        // Initialize scores and tricks taken
         players.forEach(p => {
             game_state.scores[p] = 0;
             game_state.tricksTaken[p] = 0;
@@ -197,13 +197,11 @@ app.post('/games/:game_id/bid', async (req, res) => {
         const maxRounds = Math.floor(52 / state.players.length);
         const lastPlayerIndex = state.players.length - 1;
 
-        // Bieden is van de eerste speler naar de laatste speler. We moeten de index van de huidige speler vinden.
         const playerIndex = state.players.indexOf(player_id);
         if (playerIndex !== state.currentTurnIndex) {
             return res.status(403).json({ error: 'Het is niet jouw beurt om te bieden.' });
         }
 
-        // De laatste speler mag niet het totale bod gelijk aan het ronde nummer gokken.
         if (playerIndex === lastPlayerIndex && (totalBids + bid) === state.currentRound) {
             return res.status(400).json({ error: 'De laatste speler kan niet een bod doen dat gelijk is aan het ronde nummer.' });
         }
@@ -211,7 +209,6 @@ app.post('/games/:game_id/bid', async (req, res) => {
         state.bids[player_id] = bid;
         state.currentTurnIndex = (state.currentTurnIndex + 1) % state.players.length;
 
-        // Als alle spelers hebben geboden, start de speelfase.
         if (Object.keys(state.bids).length === state.players.length) {
             state.isBiddingPhase = false;
             state.currentTurnIndex = state.trickLeaderIndex;
@@ -248,17 +245,13 @@ app.post('/games/:game_id/play', async (req, res) => {
             return res.status(400).json({ error: 'Kaart niet in je hand.' });
         }
         
-        // Verwijder de gespeelde kaart uit de hand van de speler
         playerHand.splice(cardIndex, 1);
         state.hands[player_id] = playerHand;
 
-        // Voeg de kaart toe aan de slag
         state.trick.push({ player: player_id, card });
 
-        // Update de beurt
         state.currentTurnIndex = (state.currentTurnIndex + 1) % state.players.length;
 
-        // Als de slag compleet is, bepaal de winnaar
         if (state.trick.length === state.players.length) {
             let winningCard = state.trick[0].card;
             let winner = state.trick[0].player;
@@ -268,7 +261,6 @@ app.post('/games/:game_id/play', async (req, res) => {
                 const currentCard = state.trick[i].card;
                 const currentCardValue = getCardValue(currentCard);
 
-                // Controleer op troefkaarten
                 if (currentCard.suit === state.trumpCard.suit && winningCard.suit !== state.trumpCard.suit) {
                     winningCard = currentCard;
                     winner = state.trick[i].player;
@@ -278,14 +270,11 @@ app.post('/games/:game_id/play', async (req, res) => {
                 }
             }
 
-            // Update scores
             state.tricksTaken[winner] = (state.tricksTaken[winner] || 0) + 1;
             state.trick = [];
             state.trickLeaderIndex = state.players.indexOf(winner);
 
-            // Als alle kaarten gespeeld zijn, eindig de ronde
             if (playerHand.length === 0) {
-                // Bereken de puntentelling en start een nieuwe ronde
                 state.players.forEach(p => {
                     const bid = state.bids[p];
                     const tricksWon = state.tricksTaken[p] || 0;
@@ -298,7 +287,6 @@ app.post('/games/:game_id/play', async (req, res) => {
                     state.scores[p] = (state.scores[p] || 0) + scoreChange;
                 });
                 
-                // Start de volgende ronde
                 const maxRounds = Math.floor(52 / state.players.length);
                 if (state.currentRound === maxRounds) {
                     state.roundDirection = -1;

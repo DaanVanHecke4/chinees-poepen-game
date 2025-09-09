@@ -41,7 +41,11 @@
         button:hover {
             background-color: #218838;
         }
-        #game-lobby-container, #game-screen {
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #welcome-screen, #game-lobby-container, #game-screen {
             display: none;
         }
         h2 {
@@ -62,7 +66,7 @@
             margin-top: 1rem;
         }
         /* Game specifieke stijlen */
-        #game-screen {
+        #game-screen-content {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -149,29 +153,31 @@
         
         <!-- Game scherm -->
         <div id="game-screen">
-            <h2>Spel bezig!</h2>
-            <div id="game-info">
-                <div>Ronde: <span id="round-number">1</span></div>
-                <div>Troef: <span id="trump-card"></span></div>
-                <div>Huidige speler: <span id="current-player-display"></span></div>
-            </div>
-            
-            <h3>Tafel</h3>
-            <div id="table-cards"></div>
-            
-            <h3>Jouw hand</h3>
-            <div id="player-hand"></div>
+            <div id="game-screen-content">
+                <h2>Spel bezig!</h2>
+                <div id="game-info">
+                    <div>Ronde: <span id="round-number">1</span></div>
+                    <div>Troef: <span id="trump-card"></span></div>
+                    <div>Huidige speler: <span id="current-player-display"></span></div>
+                </div>
+                
+                <h3>Tafel</h3>
+                <div id="table-cards"></div>
+                
+                <h3>Jouw hand</h3>
+                <div id="player-hand"></div>
 
-            <div id="bidding-section" style="display:none;">
-                <h4>Hoeveel slagen gok je?</h4>
-                <input type="number" id="bid-input" min="0" value="0">
-                <button id="submit-bid-btn">Gokken</button>
-            </div>
-            
-            <p id="game-message" class="error-message"></p>
+                <div id="bidding-section" style="display:none;">
+                    <h4>Hoeveel slagen gok je?</h4>
+                    <input type="number" id="bid-input" min="0" value="0">
+                    <button id="submit-bid-btn">Gokken</button>
+                </div>
+                
+                <p id="game-message" class="error-message"></p>
 
-            <h3>Scorebord</h3>
-            <ul id="scoreboard"></ul>
+                <h3>Scorebord</h3>
+                <ul id="scoreboard"></ul>
+            </div>
         </div>
     </div>
 
@@ -188,7 +194,7 @@
         let gameDeck = [];
         let playerHand = [];
         let currentRound = 0;
-        let roundDirection = 1; // 1 voor omhoog, -1 voor omlaag
+        let roundDirection = 1;
         let trumpCard = null;
         let bids = {};
         let scores = {};
@@ -220,16 +226,19 @@
         const currentPlayerDisplay = document.getElementById('current-player-display');
         const gameMessage = document.getElementById('game-message');
 
-        // Toont het juiste scherm
         const showScreen = (screenId) => {
             welcomeScreen.style.display = 'none';
             gameLobbyContainer.style.display = 'none';
             gameScreen.style.display = 'none';
 
-            document.getElementById(screenId).style.display = 'block';
+            const targetScreen = document.getElementById(screenId);
+            if (screenId === 'game-screen') {
+                targetScreen.style.display = 'flex';
+            } else {
+                targetScreen.style.display = 'block';
+            }
         };
 
-        // Functie om kaarten te maken met SVG
         const createCardSVG = (card) => {
             const cardDiv = document.createElement('div');
             cardDiv.classList.add('card');
@@ -257,7 +266,6 @@
             return cardDiv;
         };
 
-        // Class om een kaartspel te representeren
         class Deck {
             constructor() {
                 this.cards = [];
@@ -283,7 +291,6 @@
             }
         }
         
-        // Simuleert het starten van een nieuwe ronde
         const startNewRound = () => {
             biddingSection.style.display = 'block';
             gameMessage.textContent = '';
@@ -309,8 +316,6 @@
 
             updatePlayerHandUI();
 
-            // Simuleer biedbeurt
-            // In de echte multiplayer game wordt deze logica door de server beheerd
             turnIndex = players.indexOf(currentPlayerId);
             startBidding();
         };
@@ -336,46 +341,37 @@
             bids[players[turnIndex]] = bid;
             gameMessage.textContent = `${players[turnIndex]} gokte ${bid} slagen.`;
 
-            // Ga naar de volgende speler om te gokken
             turnIndex = (turnIndex + 1) % players.length;
             if (turnIndex === players.indexOf(currentPlayerId)) {
-                // Alle spelers hebben geboden, start de ronde
                 biddingSection.style.display = 'none';
                 startTrick();
             } else {
                 gameMessage.textContent = `Wachten op andere spelers om te gokken...`;
-                // Dit zou een server call moeten zijn
             }
         };
 
         submitBidBtn.addEventListener('click', submitBid);
 
         const playCard = (card) => {
-            // Check of het jouw beurt is
             if (players[turnIndex] !== currentPlayerId) {
                 gameMessage.textContent = "Het is niet jouw beurt.";
                 return;
             }
             
-            // Verwijder de kaart uit de hand
             playerHand = playerHand.filter(c => c.rank !== card.rank || c.suit !== card.suit);
             updatePlayerHandUI();
 
-            // Voeg de kaart toe aan de tafel
             const cardEl = createCardSVG(card);
             tableCardsDiv.appendChild(cardEl);
             trick.push({ player: currentPlayerId, card });
             
-            // Ga naar de volgende speler
             turnIndex = (turnIndex + 1) % players.length;
             if (trick.length === players.length) {
-                // Trick is voorbij, bepaal de winnaar
                 setTimeout(() => {
                     determineTrickWinner();
                     startTrick();
                 }, 2000);
             }
-            // Dit zou een server call moeten zijn die de beurt en de gespeelde kaart doorgeeft
         };
 
         const startTrick = () => {
@@ -385,7 +381,6 @@
                 endRound();
                 return;
             }
-            // In multiplayer game zou de trick winner de volgende beurt starten
             turnIndex = players.indexOf(trickWinner || currentPlayerId); 
             gameMessage.textContent = `Het is ${players[turnIndex]} zijn beurt om een kaart te spelen.`;
         };
@@ -399,7 +394,6 @@
                 const currentCard = trick[i].card;
                 const currentCardValue = getCardValue(currentCard);
 
-                // Check voor troefkaart
                 if (currentCard.suit === trumpCard.suit && winningCard.suit !== trumpCard.suit) {
                     winningCard = currentCard;
                     winner = trick[i].player;
@@ -419,7 +413,6 @@
         };
 
         const endRound = () => {
-            // Bereken scores
             players.forEach(player => {
                 const bid = bids[player];
                 const tricksWon = tricksTaken[player] || 0;
@@ -434,7 +427,6 @@
 
             updateScoreboardUI();
             
-            // Start nieuwe ronde
             setTimeout(() => {
                 bids = {};
                 tricksTaken = {};
@@ -451,7 +443,6 @@
             }
         };
 
-        // Functie om de game status te pollen
         const checkGameStatus = async () => {
             try {
                 const response = await fetch(`${SERVER_URL}/games/${currentGameId}/status`);
@@ -459,7 +450,6 @@
                 if (status.is_started) {
                     clearInterval(pollInterval);
                     showScreen('game-screen');
-                    // Dit zou de server moeten vragen om de eerste ronde te starten
                     startNewRound();
                 }
             } catch (error) {
@@ -467,7 +457,6 @@
             }
         };
 
-        // Functie om de lobby te updaten met spelers
         const updateLobby = async () => {
             try {
                 const response = await fetch(`${SERVER_URL}/games/${currentGameId}/players`);
@@ -481,15 +470,17 @@
                     lobbyPlayersList.appendChild(li);
                 });
 
-                if (isHost && players.length >= 2) {
+                // Correctie: Toon knop voor de host als er minimaal 3 spelers zijn
+                if (isHost && players.length >= 3) {
                     startBtn.style.display = 'block';
+                } else {
+                    startBtn.style.display = 'none';
                 }
             } catch (error) {
                 console.error('Fout bij het updaten van de lobby:', error);
             }
         };
 
-        // Functie om een nieuw spel te maken
         createGameBtn.addEventListener('click', async () => {
             const playerName = playerNameInput.value.trim();
             if (!playerName) {
@@ -512,7 +503,6 @@
                     isHost = true;
                     showScreen('game-lobby-container');
                     lobbyGameIdSpan.textContent = gameId;
-                    startBtn.style.display = 'block';
                     updateLobby();
                     pollInterval = setInterval(updateLobby, 3000);
                 } else {
@@ -524,7 +514,6 @@
             }
         });
 
-        // Functie om deel te nemen aan een spel
         joinGameBtn.addEventListener('click', async () => {
             const playerName = playerNameInput.value.trim();
             const gameId = gameIdInput.value.trim();
@@ -546,7 +535,6 @@
                     isHost = false;
                     showScreen('game-lobby-container');
                     lobbyGameIdSpan.textContent = gameId;
-
                     updateLobby();
                     pollInterval = setInterval(updateLobby, 3000);
                     setInterval(checkGameStatus, 3000);
@@ -569,7 +557,6 @@
                 if (response.ok) {
                     clearInterval(pollInterval);
                     showScreen('game-screen');
-                    // In een echte multiplayer game zou de server de spelgegevens sturen
                     startNewRound();
                 } else {
                     const errorData = await response.json();
@@ -578,6 +565,11 @@
             } catch (error) {
                 errorMessage.textContent = 'Fout bij het starten van het spel. Controleer de server.';
             }
+        });
+        
+        // Zorgt ervoor dat alleen het welkomstscherm in het begin zichtbaar is
+        window.addEventListener('DOMContentLoaded', () => {
+            showScreen('welcome-screen');
         });
     </script>
 </body>
