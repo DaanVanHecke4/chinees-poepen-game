@@ -27,7 +27,7 @@ const pool = new Pool({
   }
 });
 
-// Endpoint om een nieuw spel te maken
+// Endpoint om een nieuw spel te maken (POST-verzoek)
 app.post('/games', async (req, res) => {
   const { playerHost, gameId } = req.body;
   try {
@@ -41,6 +41,12 @@ app.post('/games', async (req, res) => {
     res.status(500).json({ error: 'Interne serverfout' });
   }
 });
+
+// Een eenvoudige GET-route om 404-fouten te voorkomen
+app.get('/games', (req, res) => {
+  res.status(200).json({ message: 'Je hebt de /games-route bereikt. Gebruik een POST-verzoek om een spel aan te maken.' });
+});
+
 
 // Endpoint om een speler toe te voegen aan een spel
 app.post('/games/:gameId/join', async (req, res) => {
