@@ -50,6 +50,31 @@ app.post('/games', async (req, res) => {
     }
 });
 
+// NIEUWE POST-route om een speler toe te voegen aan een bestaand spel
+app.post('/games/:game_id/players', async (req, res) => {
+    const { game_id } = req.params;
+    const { player_id } = req.body;
+    
+    try {
+        // Controleer of de game bestaat en niet gestart is
+        const gameCheck = await pool.query('SELECT is_started FROM games WHERE game_id = $1', [game_id]);
+        if (gameCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Spel niet gevonden.' });
+        }
+        if (gameCheck.rows[0].is_started) {
+            return res.status(400).json({ error: 'Spel is al gestart. U kunt niet deelnemen.' });
+        }
+
+        // Voeg de speler toe aan de game
+        await pool.query('INSERT INTO game_players (game_id, player_id) VALUES ($1, $2)', [game_id, player_id]);
+        
+        res.status(201).json({ message: 'Speler succesvol toegevoegd aan de lobby.' });
+    } catch (err) {
+        console.error('Fout bij het toevoegen van speler:', err);
+        res.status(500).json({ error: 'Fout bij het toevoegen van speler. Controleer de server.' });
+    }
+});
+
 // GET-route om spelers in een lobby te krijgen
 app.get('/games/:game_id/players', async (req, res) => {
     const { game_id } = req.params;
@@ -62,26 +87,23 @@ app.get('/games/:game_id/players', async (req, res) => {
     }
 });
 
-// NIEUWE POST-route om een game te starten
+// POST-route om een game te starten
 app.post('/games/:game_id/start', async (req, res) => {
     const { game_id } = req.params;
     const { player_id } = req.body;
     
     try {
-        // Controleer of de speler de host is
         const hostCheck = await pool.query('SELECT player_host FROM games WHERE game_id = $1', [game_id]);
         if (hostCheck.rows.length === 0 || hostCheck.rows[0].player_host !== player_id) {
             return res.status(403).json({ error: 'Alleen de host kan het spel starten.' });
         }
         
-        // Controleer of er genoeg spelers zijn (minimaal 2)
         const playersCheck = await pool.query('SELECT COUNT(*) FROM game_players WHERE game_id = $1', [game_id]);
         const playerCount = parseInt(playersCheck.rows[0].count, 10);
         if (playerCount < 2) {
             return res.status(400).json({ error: 'Niet genoeg spelers om te starten. Minimaal 2 spelers nodig.' });
         }
 
-        // Update de game-status naar gestart
         await pool.query('UPDATE games SET is_started = true WHERE game_id = $1', [game_id]);
         
         res.json({ message: 'Spel succesvol gestart.' });
