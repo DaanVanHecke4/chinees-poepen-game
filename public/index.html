@@ -14,6 +14,7 @@
             background-color: #f0f0f0;
             margin: 0;
             text-align: center;
+            flex-direction: column;
         }
         .container {
             background-color: white;
@@ -60,10 +61,72 @@
             color: red;
             margin-top: 1rem;
         }
+        /* Game specifieke stijlen */
+        #game-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            width: 100%;
+            max-width: 800px;
+            padding: 1rem;
+        }
+        #game-info {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+        #player-hand, #table-cards {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            border: 2px solid #ccc;
+            padding: 1rem;
+            border-radius: 10px;
+            min-height: 120px;
+        }
+        #player-hand .card {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        #player-hand .card:hover {
+            transform: translateY(-5px);
+        }
+        .card {
+            width: 60px;
+            height: 90px;
+            background-color: white;
+            border: 1px solid black;
+            border-radius: 5px;
+            font-size: 1.2rem;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            font-family: 'Times New Roman', serif;
+        }
+        .card .suit-top {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+        }
+        .card .suit-bottom {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            transform: rotate(180deg);
+        }
+        .red {
+            color: red;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="main-container">
         <!-- Welkomstscherm en spel aanmaken/joinen -->
         <div id="welcome-screen">
             <h2>Welkom bij Chinees Poepen</h2>
@@ -84,10 +147,31 @@
             <button id="start-game-btn" style="display:none;">Spel Starten</button>
         </div>
         
-        <!-- Game scherm (zal in de toekomst worden geïmplementeerd) -->
+        <!-- Game scherm -->
         <div id="game-screen">
-            <h2>Het spel is gestart!</h2>
-            <p>Welkom bij het spel!</p>
+            <h2>Spel bezig!</h2>
+            <div id="game-info">
+                <div>Ronde: <span id="round-number">1</span></div>
+                <div>Troef: <span id="trump-card"></span></div>
+                <div>Huidige speler: <span id="current-player-display"></span></div>
+            </div>
+            
+            <h3>Tafel</h3>
+            <div id="table-cards"></div>
+            
+            <h3>Jouw hand</h3>
+            <div id="player-hand"></div>
+
+            <div id="bidding-section" style="display:none;">
+                <h4>Hoeveel slagen gok je?</h4>
+                <input type="number" id="bid-input" min="0" value="0">
+                <button id="submit-bid-btn">Gokken</button>
+            </div>
+            
+            <p id="game-message" class="error-message"></p>
+
+            <h3>Scorebord</h3>
+            <ul id="scoreboard"></ul>
         </div>
     </div>
 
@@ -97,6 +181,22 @@
         let currentPlayerId = '';
         let currentGameId = '';
         let pollInterval = null;
+        let isHost = false;
+        
+        // Game state variabelen
+        let players = [];
+        let gameDeck = [];
+        let playerHand = [];
+        let currentRound = 0;
+        let roundDirection = 1; // 1 voor omhoog, -1 voor omlaag
+        let trumpCard = null;
+        let bids = {};
+        let scores = {};
+        let trick = [];
+        let turnIndex = 0;
+        let leadSuit = null;
+        let trickWinner = null;
+        let tricksTaken = {};
 
         const welcomeScreen = document.getElementById('welcome-screen');
         const gameLobbyContainer = document.getElementById('game-lobby-container');
@@ -109,6 +209,16 @@
         const lobbyGameIdSpan = document.getElementById('lobby-game-id');
         const lobbyPlayersList = document.getElementById('lobby-players');
         const errorMessage = document.getElementById('error-message');
+        const roundNumberSpan = document.getElementById('round-number');
+        const trumpCardSpan = document.getElementById('trump-card');
+        const playerHandDiv = document.getElementById('player-hand');
+        const tableCardsDiv = document.getElementById('table-cards');
+        const biddingSection = document.getElementById('bidding-section');
+        const bidInput = document.getElementById('bid-input');
+        const submitBidBtn = document.getElementById('submit-bid-btn');
+        const scoreboardList = document.getElementById('scoreboard');
+        const currentPlayerDisplay = document.getElementById('current-player-display');
+        const gameMessage = document.getElementById('game-message');
 
         // Toont het juiste scherm
         const showScreen = (screenId) => {
@@ -119,17 +229,238 @@
             document.getElementById(screenId).style.display = 'block';
         };
 
+        // Functie om kaarten te maken met SVG
+        const createCardSVG = (card) => {
+            const cardDiv = document.createElement('div');
+            cardDiv.classList.add('card');
+            if (card.suit === '♥' || card.suit === '♦') {
+                cardDiv.classList.add('red');
+            }
+            cardDiv.dataset.suit = card.suit;
+            cardDiv.dataset.rank = card.rank;
+            
+            const rankDiv = document.createElement('div');
+            rankDiv.textContent = card.rank;
+
+            const suitTopSpan = document.createElement('span');
+            suitTopSpan.classList.add('suit-top');
+            suitTopSpan.innerHTML = card.suit;
+            
+            const suitBottomSpan = document.createElement('span');
+            suitBottomSpan.classList.add('suit-bottom');
+            suitBottomSpan.innerHTML = card.suit;
+
+            cardDiv.appendChild(suitTopSpan);
+            cardDiv.appendChild(rankDiv);
+            cardDiv.appendChild(suitBottomSpan);
+
+            return cardDiv;
+        };
+
+        // Class om een kaartspel te representeren
+        class Deck {
+            constructor() {
+                this.cards = [];
+                const suits = ['♥', '♦', '♠', '♣'];
+                const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+                for (const suit of suits) {
+                    for (const rank of ranks) {
+                        this.cards.push({ suit, rank });
+                    }
+                }
+                this.shuffle();
+            }
+
+            shuffle() {
+                for (let i = this.cards.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [this.cards[i], this.cards[j]] = [this.cards[j], this.cards[i]];
+                }
+            }
+
+            deal(numCards) {
+                return this.cards.splice(0, numCards);
+            }
+        }
+        
+        // Simuleert het starten van een nieuwe ronde
+        const startNewRound = () => {
+            biddingSection.style.display = 'block';
+            gameMessage.textContent = '';
+            tableCardsDiv.innerHTML = '';
+            playerHandDiv.innerHTML = '';
+            
+            const maxRounds = Math.floor(52 / players.length);
+            if (currentRound === maxRounds) {
+                roundDirection = -1;
+            } else if (currentRound === 1 && roundDirection === -1) {
+                roundDirection = 1;
+            }
+            currentRound += roundDirection;
+
+            const newDeck = new Deck();
+            trumpCard = newDeck.deal(1)[0];
+            
+            const numCardsToDeal = currentRound;
+            playerHand = newDeck.deal(numCardsToDeal);
+
+            roundNumberSpan.textContent = currentRound;
+            trumpCardSpan.textContent = `${trumpCard.rank}${trumpCard.suit}`;
+
+            updatePlayerHandUI();
+
+            // Simuleer biedbeurt
+            // In de echte multiplayer game wordt deze logica door de server beheerd
+            turnIndex = players.indexOf(currentPlayerId);
+            startBidding();
+        };
+
+        const updatePlayerHandUI = () => {
+            playerHandDiv.innerHTML = '';
+            playerHand.forEach(card => {
+                const cardEl = createCardSVG(card);
+                cardEl.addEventListener('click', () => playCard(card));
+                playerHandDiv.appendChild(cardEl);
+            });
+        };
+
+        const startBidding = () => {
+            bidInput.value = 0;
+            bidInput.max = currentRound;
+            biddingSection.style.display = 'block';
+            gameMessage.textContent = `Bieden: ${players[turnIndex]} aan de beurt.`;
+        };
+
+        const submitBid = () => {
+            const bid = parseInt(bidInput.value, 10);
+            bids[players[turnIndex]] = bid;
+            gameMessage.textContent = `${players[turnIndex]} gokte ${bid} slagen.`;
+
+            // Ga naar de volgende speler om te gokken
+            turnIndex = (turnIndex + 1) % players.length;
+            if (turnIndex === players.indexOf(currentPlayerId)) {
+                // Alle spelers hebben geboden, start de ronde
+                biddingSection.style.display = 'none';
+                startTrick();
+            } else {
+                gameMessage.textContent = `Wachten op andere spelers om te gokken...`;
+                // Dit zou een server call moeten zijn
+            }
+        };
+
+        submitBidBtn.addEventListener('click', submitBid);
+
+        const playCard = (card) => {
+            // Check of het jouw beurt is
+            if (players[turnIndex] !== currentPlayerId) {
+                gameMessage.textContent = "Het is niet jouw beurt.";
+                return;
+            }
+            
+            // Verwijder de kaart uit de hand
+            playerHand = playerHand.filter(c => c.rank !== card.rank || c.suit !== card.suit);
+            updatePlayerHandUI();
+
+            // Voeg de kaart toe aan de tafel
+            const cardEl = createCardSVG(card);
+            tableCardsDiv.appendChild(cardEl);
+            trick.push({ player: currentPlayerId, card });
+            
+            // Ga naar de volgende speler
+            turnIndex = (turnIndex + 1) % players.length;
+            if (trick.length === players.length) {
+                // Trick is voorbij, bepaal de winnaar
+                setTimeout(() => {
+                    determineTrickWinner();
+                    startTrick();
+                }, 2000);
+            }
+            // Dit zou een server call moeten zijn die de beurt en de gespeelde kaart doorgeeft
+        };
+
+        const startTrick = () => {
+            trick = [];
+            tableCardsDiv.innerHTML = '';
+            if (Object.keys(tricksTaken).length === currentRound) {
+                endRound();
+                return;
+            }
+            // In multiplayer game zou de trick winner de volgende beurt starten
+            turnIndex = players.indexOf(trickWinner || currentPlayerId); 
+            gameMessage.textContent = `Het is ${players[turnIndex]} zijn beurt om een kaart te spelen.`;
+        };
+
+        const determineTrickWinner = () => {
+            const leadingSuit = trick[0].card.suit;
+            let winningCard = trick[0].card;
+            let winner = trick[0].player;
+
+            for (let i = 1; i < trick.length; i++) {
+                const currentCard = trick[i].card;
+                const currentCardValue = getCardValue(currentCard);
+
+                // Check voor troefkaart
+                if (currentCard.suit === trumpCard.suit && winningCard.suit !== trumpCard.suit) {
+                    winningCard = currentCard;
+                    winner = trick[i].player;
+                } else if (currentCard.suit === leadingSuit && currentCardValue > getCardValue(winningCard)) {
+                    winningCard = currentCard;
+                    winner = trick[i].player;
+                }
+            }
+            gameMessage.textContent = `${winner} wint de slag met ${winningCard.rank}${winningCard.suit}!`;
+            tricksTaken[winner] = (tricksTaken[winner] || 0) + 1;
+            trickWinner = winner;
+        };
+
+        const getCardValue = (card) => {
+            const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+            return ranks.indexOf(card.rank);
+        };
+
+        const endRound = () => {
+            // Bereken scores
+            players.forEach(player => {
+                const bid = bids[player];
+                const tricksWon = tricksTaken[player] || 0;
+                let scoreChange = 0;
+                if (bid === tricksWon) {
+                    scoreChange = 10 + (2 * tricksWon);
+                } else {
+                    scoreChange = (bid - tricksWon) * -2;
+                }
+                scores[player] = (scores[player] || 0) + scoreChange;
+            });
+
+            updateScoreboardUI();
+            
+            // Start nieuwe ronde
+            setTimeout(() => {
+                bids = {};
+                tricksTaken = {};
+                startNewRound();
+            }, 5000);
+        };
+
+        const updateScoreboardUI = () => {
+            scoreboardList.innerHTML = '';
+            for (const [player, score] of Object.entries(scores)) {
+                const li = document.createElement('li');
+                li.textContent = `${player}: ${score} punten`;
+                scoreboardList.appendChild(li);
+            }
+        };
+
         // Functie om de game status te pollen
         const checkGameStatus = async () => {
             try {
-                const response = await fetch(`${SERVER_URL}/games`);
-                const games = await response.json();
-                const game = games.find(g => g.game_id === currentGameId);
-
-                if (!game) {
-                    // Als de game niet meer in de lijst van niet-gestarte games staat, is hij gestart
-                    showScreen('game-screen');
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/status`);
+                const status = await response.json();
+                if (status.is_started) {
                     clearInterval(pollInterval);
+                    showScreen('game-screen');
+                    // Dit zou de server moeten vragen om de eerste ronde te starten
+                    startNewRound();
                 }
             } catch (error) {
                 console.error('Fout bij het controleren van de gamestatus:', error);
@@ -140,39 +471,21 @@
         const updateLobby = async () => {
             try {
                 const response = await fetch(`${SERVER_URL}/games/${currentGameId}/players`);
-                const players = await response.json();
+                const playersData = await response.json();
+                players = playersData.map(p => p.player_id);
                 
                 lobbyPlayersList.innerHTML = '';
                 players.forEach(player => {
                     const li = document.createElement('li');
-                    li.textContent = player.player_id;
+                    li.textContent = player;
                     lobbyPlayersList.appendChild(li);
                 });
-            } catch (error) {
-                console.error('Fout bij het updaten van de lobby:', error);
-            }
-        };
 
-        // Nieuwe functie om het spel te starten
-        const startGame = async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/start`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_id: currentPlayerId })
-                });
-
-                if (response.status === 200) {
-                    // Spel is succesvol gestart, laat de spelers de game screen zien
-                    showScreen('game-screen');
-                    clearInterval(pollInterval);
-                } else {
-                    const errorData = await response.json();
-                    errorMessage.textContent = errorData.error;
+                if (isHost && players.length >= 2) {
+                    startBtn.style.display = 'block';
                 }
             } catch (error) {
-                console.error('Fout bij het starten van het spel:', error);
-                errorMessage.textContent = 'Fout bij het starten van het spel. Controleer de server.';
+                console.error('Fout bij het updaten van de lobby:', error);
             }
         };
 
@@ -196,16 +509,12 @@
                 if (response.status === 201) {
                     currentPlayerId = playerName;
                     currentGameId = gameId;
+                    isHost = true;
                     showScreen('game-lobby-container');
                     lobbyGameIdSpan.textContent = gameId;
-
-                    // Laat de startknop zien als de speler de host is
                     startBtn.style.display = 'block';
-                    startBtn.addEventListener('click', startGame);
-
                     updateLobby();
                     pollInterval = setInterval(updateLobby, 3000);
-
                 } else {
                     const errorData = await response.json();
                     errorMessage.textContent = errorData.error;
@@ -234,20 +543,40 @@
                 if (response.status === 201) {
                     currentPlayerId = playerName;
                     currentGameId = gameId;
+                    isHost = false;
                     showScreen('game-lobby-container');
                     lobbyGameIdSpan.textContent = gameId;
 
                     updateLobby();
                     pollInterval = setInterval(updateLobby, 3000);
-                    // Start ook de status check voor niet-hosts
                     setInterval(checkGameStatus, 3000);
-
                 } else {
                     const errorData = await response.json();
                     errorMessage.textContent = errorData.error;
                 }
             } catch (error) {
                 errorMessage.textContent = 'Fout bij het toevoegen van speler. Controleer de server.';
+            }
+        });
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: currentPlayerId })
+                });
+                if (response.ok) {
+                    clearInterval(pollInterval);
+                    showScreen('game-screen');
+                    // In een echte multiplayer game zou de server de spelgegevens sturen
+                    startNewRound();
+                } else {
+                    const errorData = await response.json();
+                    errorMessage.textContent = errorData.error;
+                }
+            } catch (error) {
+                errorMessage.textContent = 'Fout bij het starten van het spel. Controleer de server.';
             }
         });
     </script>
