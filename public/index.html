@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Chinees Poepen</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            text-align: center;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>Chinees Poepen</h1>
+        <div id="menu">
+            <button id="create-game-btn">Nieuw Spel Starten</button>
+            <button id="join-game-btn">Bij Spel Komen</button>
+        </div>
+        <div id="create-game-form" style="display:none;">
+            <h2>Nieuw Spel Starten</h2>
+            <input type="text" id="host-name" placeholder="Je naam">
+            <button id="submit-create-game">Maak Spel</button>
+        </div>
+        <div id="join-game-form" style="display:none;">
+            <h2>Bij Spel Komen</h2>
+            <input type="text" id="join-game-id" placeholder="Spel ID">
+            <input type="text" id="join-player-name" placeholder="Je naam">
+            <button id="submit-join-game">Deelnemen</button>
+        </div>
+        <div id="game-lobby" style="display:none;">
+            <h2>Spel Lobby</h2>
+            <p id="game-id-display"></p>
+            <p>Spelers in de lobby:</p>
+            <ul id="players-list"></ul>
+            <button id="start-game-btn">Start Spel</button>
+        </div>
+        <div id="game-board" style="display:none;">
+            <h2>Speelbord</h2>
+            <!-- Hier komt het spelbord van het Chinees Poepen -->
+        </div>
+    </div>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        // VERWIJDER DE SPATIE AAN HET EINDE VAN DE URL
+        const SERVER_URL = 'https://chinees-poepen-game.onrender.com';
+
+        document.getElementById('create-game-btn').addEventListener('click', () => {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('create-game-form').style.display = 'block';
+        });
+
+        document.getElementById('submit-create-game').addEventListener('click', async () => {
+            const hostName = document.getElementById('host-name').value;
+            if (!hostName) return alert('Voer een naam in');
+
+            const gameId = Math.random().toString(36).substring(2, 7);
+
+            try {
+                const response = await fetch(`${SERVER_URL}/games`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ gameId, playerHost: hostName }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const game = await response.json();
+                console.log('Spel aangemaakt:', game);
+
+                document.getElementById('create-game-form').style.display = 'none';
+                document.getElementById('game-lobby').style.display = 'block';
+                document.getElementById('game-id-display').textContent = `Spel ID: ${game.game_id}`;
+                document.getElementById('players-list').innerHTML = `<li>${hostName} (Host)</li>`;
+
+            } catch (error) {
+                console.error('Fout bij het aanmaken van het spel:', error);
+                alert('Fout bij het aanmaken van het spel. Controleer de server.');
+            }
+        });
+        
+        document.getElementById('join-game-btn').addEventListener('click', () => {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('join-game-form').style.display = 'block';
+        });
+
+        document.getElementById('submit-join-game').addEventListener('click', async () => {
+            const gameId = document.getElementById('join-game-id').value;
+            const playerName = document.getElementById('join-player-name').value;
+            if (!gameId || !playerName) {
+                return alert('Voer een Spel ID en naam in');
+            }
+
+            try {
+                const response = await fetch(`${SERVER_URL}/games/${gameId}/join`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ playerId: playerName }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const game = await response.json();
+                console.log('Bij spel gekomen:', game);
+
+                document.getElementById('join-game-form').style.display = 'none';
+                document.getElementById('game-lobby').style.display = 'block';
+                document.getElementById('game-id-display').textContent = `Spel ID: ${game.game_id}`;
+
+                // Hier zou je de lijst met spelers van de server moeten ophalen om de UI bij te werken
+                // De huidige code werkt niet real-time
+                const playersList = document.getElementById('players-list');
+                playersList.innerHTML += `<li>${playerName}</li>`;
+
+            } catch (error) {
+                console.error('Fout bij het deelnemen aan het spel:', error);
+                alert('Fout bij het deelnemen aan het spel. Controleer of het Spel ID correct is.');
+            }
+        });
+        
+        // Voeg hier de Socket.io code toe voor real-time communicatie
+        const socket = io(SERVER_URL);
+
+        socket.on('connect', () => {
+            console.log('Verbonden met Socket.IO server');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Ontkoppeld van Socket.IO server');
+        });
+        
+    </script>
+</body>
+</html>
