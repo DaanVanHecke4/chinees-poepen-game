@@ -2,154 +2,254 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chinees Poepen</title>
-    <link rel="stylesheet" href="style.css">
     <style>
         body {
             font-family: Arial, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            flex-direction: column;
+            min-height: 100vh;
             background-color: #f0f0f0;
-        }
-        #game-container {
+            margin: 0;
             text-align: center;
-            padding: 20px;
+        }
+        .container {
+            background-color: white;
+            padding: 2rem;
             border-radius: 10px;
-            background-color: #fff;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 400px;
+        }
+        input, button {
+            width: 100%;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            box-sizing: border-box;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        #game-lobby-container, #game-screen {
+            display: none;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        #lobby-players {
+            list-style-type: none;
+            padding: 0;
+        }
+        #lobby-players li {
+            background-color: #e9ecef;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 5px;
+        }
+        .error-message {
+            color: red;
+            margin-top: 1rem;
         }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <h1>Chinees Poepen</h1>
-        <div id="menu">
-            <button id="create-game-btn">Nieuw Spel Starten</button>
-            <button id="join-game-btn">Bij Spel Komen</button>
+    <div class="container">
+        <!-- Welkomstscherm en spel aanmaken/joinen -->
+        <div id="welcome-screen">
+            <h2>Welkom bij Chinees Poepen</h2>
+            <p>Voer je naam in en maak een nieuw spel aan of word lid van een bestaand spel.</p>
+            <input type="text" id="player-name-input" placeholder="Je naam" required>
+            <button id="create-game-btn">Nieuw Spel Maken</button>
+            <input type="text" id="game-id-input" placeholder="Spel ID">
+            <button id="join-game-btn">Deelnemen aan Spel</button>
+            <p id="error-message" class="error-message"></p>
         </div>
-        <div id="create-game-form" style="display:none;">
-            <h2>Nieuw Spel Starten</h2>
-            <input type="text" id="host-name" placeholder="Je naam">
-            <button id="submit-create-game">Maak Spel</button>
-        </div>
-        <div id="join-game-form" style="display:none;">
-            <h2>Bij Spel Komen</h2>
-            <input type="text" id="join-game-id" placeholder="Spel ID">
-            <input type="text" id="join-player-name" placeholder="Je naam">
-            <button id="submit-join-game">Deelnemen</button>
-        </div>
-        <div id="game-lobby" style="display:none;">
+
+        <!-- Lobby scherm -->
+        <div id="game-lobby-container">
             <h2>Spel Lobby</h2>
-            <p id="game-id-display"></p>
+            <p>Spel ID: <span id="lobby-game-id"></span></p>
             <p>Spelers in de lobby:</p>
-            <ul id="players-list"></ul>
-            <button id="start-game-btn">Start Spel</button>
+            <ul id="lobby-players"></ul>
+            <button id="start-game-btn" style="display:none;">Spel Starten</button>
         </div>
-        <div id="game-board" style="display:none;">
-            <h2>Speelbord</h2>
-            <!-- Hier komt het spelbord van het Chinees Poepen -->
+        
+        <!-- Game scherm (zal in de toekomst worden geïmplementeerd) -->
+        <div id="game-screen">
+            <h2>Het spel is gestart!</h2>
+            <p>Welkom bij het spel!</p>
         </div>
     </div>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
     <script>
-        // VERWIJDER DE SPATIE AAN HET EINDE VAN DE URL
         const SERVER_URL = 'https://chinees-poepen-game.onrender.com';
+        
+        let currentPlayerId = '';
+        let currentGameId = '';
+        let pollInterval = null;
 
-        document.getElementById('create-game-btn').addEventListener('click', () => {
-            document.getElementById('menu').style.display = 'none';
-            document.getElementById('create-game-form').style.display = 'block';
-        });
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const gameLobbyContainer = document.getElementById('game-lobby-container');
+        const gameScreen = document.getElementById('game-screen');
+        const createGameBtn = document.getElementById('create-game-btn');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const startBtn = document.getElementById('start-game-btn');
+        const playerNameInput = document.getElementById('player-name-input');
+        const gameIdInput = document.getElementById('game-id-input');
+        const lobbyGameIdSpan = document.getElementById('lobby-game-id');
+        const lobbyPlayersList = document.getElementById('lobby-players');
+        const errorMessage = document.getElementById('error-message');
 
-        document.getElementById('submit-create-game').addEventListener('click', async () => {
-            const hostName = document.getElementById('host-name').value;
-            if (!hostName) return alert('Voer een naam in');
+        // Toont het juiste scherm
+        const showScreen = (screenId) => {
+            welcomeScreen.style.display = 'none';
+            gameLobbyContainer.style.display = 'none';
+            gameScreen.style.display = 'none';
+
+            document.getElementById(screenId).style.display = 'block';
+        };
+
+        // Functie om de game status te pollen
+        const checkGameStatus = async () => {
+            try {
+                const response = await fetch(`${SERVER_URL}/games`);
+                const games = await response.json();
+                const game = games.find(g => g.game_id === currentGameId);
+
+                if (!game) {
+                    // Als de game niet meer in de lijst van niet-gestarte games staat, is hij gestart
+                    showScreen('game-screen');
+                    clearInterval(pollInterval);
+                }
+            } catch (error) {
+                console.error('Fout bij het controleren van de gamestatus:', error);
+            }
+        };
+
+        // Functie om de lobby te updaten met spelers
+        const updateLobby = async () => {
+            try {
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/players`);
+                const players = await response.json();
+                
+                lobbyPlayersList.innerHTML = '';
+                players.forEach(player => {
+                    const li = document.createElement('li');
+                    li.textContent = player.player_id;
+                    lobbyPlayersList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('Fout bij het updaten van de lobby:', error);
+            }
+        };
+
+        // Nieuwe functie om het spel te starten
+        const startGame = async () => {
+            try {
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: currentPlayerId })
+                });
+
+                if (response.status === 200) {
+                    // Spel is succesvol gestart, laat de spelers de game screen zien
+                    showScreen('game-screen');
+                    clearInterval(pollInterval);
+                } else {
+                    const errorData = await response.json();
+                    errorMessage.textContent = errorData.error;
+                }
+            } catch (error) {
+                console.error('Fout bij het starten van het spel:', error);
+                errorMessage.textContent = 'Fout bij het starten van het spel. Controleer de server.';
+            }
+        };
+
+        // Functie om een nieuw spel te maken
+        createGameBtn.addEventListener('click', async () => {
+            const playerName = playerNameInput.value.trim();
+            if (!playerName) {
+                errorMessage.textContent = 'Vul een naam in.';
+                return;
+            }
 
             const gameId = Math.random().toString(36).substring(2, 7);
-
+            
             try {
                 const response = await fetch(`${SERVER_URL}/games`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ gameId, playerHost: hostName }),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_id: gameId, player_host: playerName })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                if (response.status === 201) {
+                    currentPlayerId = playerName;
+                    currentGameId = gameId;
+                    showScreen('game-lobby-container');
+                    lobbyGameIdSpan.textContent = gameId;
+
+                    // Laat de startknop zien als de speler de host is
+                    startBtn.style.display = 'block';
+                    startBtn.addEventListener('click', startGame);
+
+                    updateLobby();
+                    pollInterval = setInterval(updateLobby, 3000);
+
+                } else {
+                    const errorData = await response.json();
+                    errorMessage.textContent = errorData.error;
                 }
-
-                const game = await response.json();
-                console.log('Spel aangemaakt:', game);
-
-                document.getElementById('create-game-form').style.display = 'none';
-                document.getElementById('game-lobby').style.display = 'block';
-                document.getElementById('game-id-display').textContent = `Spel ID: ${game.game_id}`;
-                document.getElementById('players-list').innerHTML = `<li>${hostName} (Host)</li>`;
-
             } catch (error) {
-                console.error('Fout bij het aanmaken van het spel:', error);
-                alert('Fout bij het aanmaken van het spel. Controleer de server.');
+                errorMessage.textContent = 'Fout bij het aanmaken van het spel. Controleer de server.';
             }
         });
-        
-        document.getElementById('join-game-btn').addEventListener('click', () => {
-            document.getElementById('menu').style.display = 'none';
-            document.getElementById('join-game-form').style.display = 'block';
-        });
 
-        document.getElementById('submit-join-game').addEventListener('click', async () => {
-            const gameId = document.getElementById('join-game-id').value;
-            const playerName = document.getElementById('join-player-name').value;
-            if (!gameId || !playerName) {
-                return alert('Voer een Spel ID en naam in');
+        // Functie om deel te nemen aan een spel
+        joinGameBtn.addEventListener('click', async () => {
+            const playerName = playerNameInput.value.trim();
+            const gameId = gameIdInput.value.trim();
+            if (!playerName || !gameId) {
+                errorMessage.textContent = 'Vul je naam en het spel ID in.';
+                return;
             }
 
             try {
-                const response = await fetch(`${SERVER_URL}/games/${gameId}/join`, {
+                const response = await fetch(`${SERVER_URL}/games/${gameId}/players`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ playerId: playerName }),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: playerName })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                if (response.status === 201) {
+                    currentPlayerId = playerName;
+                    currentGameId = gameId;
+                    showScreen('game-lobby-container');
+                    lobbyGameIdSpan.textContent = gameId;
+
+                    updateLobby();
+                    pollInterval = setInterval(updateLobby, 3000);
+                    // Start ook de status check voor niet-hosts
+                    setInterval(checkGameStatus, 3000);
+
+                } else {
+                    const errorData = await response.json();
+                    errorMessage.textContent = errorData.error;
                 }
-
-                const game = await response.json();
-                console.log('Bij spel gekomen:', game);
-
-                document.getElementById('join-game-form').style.display = 'none';
-                document.getElementById('game-lobby').style.display = 'block';
-                document.getElementById('game-id-display').textContent = `Spel ID: ${game.game_id}`;
-
-                // Hier zou je de lijst met spelers van de server moeten ophalen om de UI bij te werken
-                // De huidige code werkt niet real-time
-                const playersList = document.getElementById('players-list');
-                playersList.innerHTML += `<li>${playerName}</li>`;
-
             } catch (error) {
-                console.error('Fout bij het deelnemen aan het spel:', error);
-                alert('Fout bij het deelnemen aan het spel. Controleer of het Spel ID correct is.');
+                errorMessage.textContent = 'Fout bij het toevoegen van speler. Controleer de server.';
             }
         });
-        
-        // Voeg hier de Socket.io code toe voor real-time communicatie
-        const socket = io(SERVER_URL);
-
-        socket.on('connect', () => {
-            console.log('Verbonden met Socket.IO server');
-        });
-
-        socket.on('disconnect', () => {
-            console.log('Ontkoppeld van Socket.IO server');
-        });
-        
     </script>
 </body>
 </html>
