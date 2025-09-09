@@ -191,7 +191,6 @@
         
         // Game state variabelen
         let players = [];
-        let gameDeck = [];
         let playerHand = [];
         let currentRound = 0;
         let roundDirection = 1;
@@ -291,26 +290,21 @@
             }
         }
         
-        const startNewRound = () => {
+        const startNewRound = (gameState) => {
+            players = gameState.players;
+            currentRound = gameState.currentRound;
+            roundDirection = gameState.roundDirection;
+            trumpCard = gameState.trumpCard;
+            bids = gameState.bids;
+            scores = gameState.scores;
+            tricksTaken = gameState.tricksTaken;
+            playerHand = gameState.hands[currentPlayerId];
+
             biddingSection.style.display = 'block';
             gameMessage.textContent = '';
             tableCardsDiv.innerHTML = '';
             playerHandDiv.innerHTML = '';
             
-            const maxRounds = Math.floor(52 / players.length);
-            if (currentRound === maxRounds) {
-                roundDirection = -1;
-            } else if (currentRound === 1 && roundDirection === -1) {
-                roundDirection = 1;
-            }
-            currentRound += roundDirection;
-
-            const newDeck = new Deck();
-            trumpCard = newDeck.deal(1)[0];
-            
-            const numCardsToDeal = currentRound;
-            playerHand = newDeck.deal(numCardsToDeal);
-
             roundNumberSpan.textContent = currentRound;
             trumpCardSpan.textContent = `${trumpCard.rank}${trumpCard.suit}`;
 
@@ -450,7 +444,7 @@
                 if (status.is_started) {
                     clearInterval(pollInterval);
                     showScreen('game-screen');
-                    startNewRound();
+                    startNewRound(status.game_state);
                 }
             } catch (error) {
                 console.error('Fout bij het controleren van de gamestatus:', error);
@@ -554,13 +548,15 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ player_id: currentPlayerId })
                 });
+                
+                const responseData = await response.json();
+
                 if (response.ok) {
                     clearInterval(pollInterval);
                     showScreen('game-screen');
-                    startNewRound();
+                    startNewRound(responseData.game_state);
                 } else {
-                    const errorData = await response.json();
-                    errorMessage.textContent = errorData.error;
+                    errorMessage.textContent = responseData.error;
                 }
             } catch (error) {
                 errorMessage.textContent = 'Fout bij het starten van het spel. Controleer de server.';

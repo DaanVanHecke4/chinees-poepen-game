@@ -137,9 +137,9 @@ app.post('/games/:game_id/start', async (req, res) => {
         
         const game_state = {
             players,
-            currentRound: 0,
+            currentRound: 1, // Start bij ronde 1
             roundDirection: 1,
-            trumpCard: null,
+            trumpCard: newDeck.deal(1)[0],
             bids: {},
             tricksTaken: {},
             scores: {},
@@ -150,10 +150,12 @@ app.post('/games/:game_id/start', async (req, res) => {
             isBiddingPhase: true
         };
 
-        players.forEach(p => {
-            game_state.scores[p] = 0;
-            game_state.tricksTaken[p] = 0;
-        });
+        const numCardsToDeal = game_state.currentRound;
+        for (const player of players) {
+            game_state.scores[player] = 0;
+            game_state.tricksTaken[player] = 0;
+            game_state.hands[player] = newDeck.deal(numCardsToDeal);
+        }
 
         await pool.query('UPDATE games SET is_started = true, game_state = $1 WHERE game_id = $2', [JSON.stringify(game_state), game_id]);
         
