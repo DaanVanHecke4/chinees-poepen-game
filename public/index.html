@@ -145,6 +145,16 @@
 
         const updateLobby = async () => {
             try {
+                const gameStatusResponse = await fetch(`${SERVER_URL}/games/${currentGameId}/status`);
+                const gameStatus = await gameStatusResponse.json();
+                
+                if (gameStatus.is_started) {
+                    clearInterval(pollInterval);
+                    showScreen('game-screen');
+                    pollInterval = setInterval(pollGameState, 3000);
+                    return;
+                }
+
                 const response = await fetch(`${SERVER_URL}/games/${currentGameId}/players`);
                 const players = await response.json();
                 
@@ -307,6 +317,7 @@
                     lobbyGameIdSpan.textContent = gameId;
                     startBtn.classList.remove('hidden');
                     startBtn.addEventListener('click', startGame);
+                    // Start polling om te controleren of de game start
                     pollInterval = setInterval(updateLobby, 3000);
                 } else {
                     const errorData = await response.json();
@@ -337,8 +348,8 @@
                     currentGameId = gameId;
                     showScreen('game-lobby-container');
                     lobbyGameIdSpan.textContent = gameId;
+                    // Start polling om te controleren of de game start
                     pollInterval = setInterval(updateLobby, 3000);
-                    setInterval(pollGameState, 3000);
                 } else {
                     const errorData = await response.json();
                     errorMessage.textContent = errorData.error;

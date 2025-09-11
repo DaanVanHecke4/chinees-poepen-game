@@ -57,11 +57,6 @@ app.get('/status', (req, res) => {
     res.json({ status: 'ok' });
 });
 
-// GET-route om de serverstatus te controleren
-app.get('/', (req, res) => {
-    res.send('Server draait.');
-});
-
 // GET-route voor alle games (voor de lobby)
 app.get('/games', async (req, res) => {
     try {
@@ -70,6 +65,21 @@ app.get('/games', async (req, res) => {
     } catch (err) {
         console.error('Fout bij het ophalen van games:', err.message);
         res.status(500).send('Fout bij het ophalen van games. Controleer de serverlogs.');
+    }
+});
+
+// GET-route om de startstatus van een spel te controleren
+app.get('/games/:game_id/status', async (req, res) => {
+    const { game_id } = req.params;
+    try {
+        const result = await pool.query('SELECT is_started FROM games WHERE game_id = $1', [game_id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Spel niet gevonden.' });
+        }
+        res.json({ is_started: result.rows[0].is_started });
+    } catch (err) {
+        console.error('Fout bij het ophalen van de spelstatus:', err.message);
+        res.status(500).json({ error: 'Fout bij het ophalen van de spelstatus. Controleer de server.' });
     }
 });
 
@@ -182,11 +192,18 @@ app.post('/games/:game_id/play_card', async (req, res) => {
     const { player_id, card } = req.body;
     
     const gameState = games[game_id];
-    if (!gameState || gameState.current_turn !== player_id) {
+    if (!gameState) {
+        console.error(`404: Spel met ID ${game_id} niet gevonden in in-memory state.`);
+        return res.status(404).json({ error: 'Spel niet gevonden.' });
+    }
+    if (gameState.current_turn !== player_id) {
+        console.error(`400: Het is niet de beurt van ${player_id}. Huidige beurt is van ${gameState.current_turn}.`);
         return res.status(400).json({ error: 'Het is niet jouw beurt.' });
     }
 
     const topCard = gameState.discard_pile[gameState.discard_pile.length - 1];
+    
+    console.log(`Poging om kaart te spelen:`, { player: player_id, card, topCard });
     
     // Check if the card can be played (same suit or same value)
     if (card.suit === topCard.suit || card.value === topCard.value || card.value === '8') {
@@ -203,13 +220,16 @@ app.post('/games/:game_id/play_card', async (req, res) => {
             const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.length;
             gameState.current_turn = gameState.players[nextPlayerIndex];
             gameState.status_message = `Kaart gespeeld. Nu is ${gameState.current_turn} aan de beurt.`;
+            console.log(`Kaart succesvol gespeeld. Nieuwe beurt voor: ${gameState.current_turn}`);
 
             // Stuur de bijgewerkte state naar de client
             res.json({ message: 'Kaart succesvol gespeeld.', gameState });
         } else {
+            console.error(`400: Kaart ${JSON.stringify(card)} niet gevonden in de hand van ${player_id}.`);
             res.status(400).json({ error: 'Deze kaart zit niet in je hand.' });
         }
     } else {
+        console.error(`400: Kaart ${JSON.stringify(card)} kan niet worden gespeeld op ${JSON.stringify(topCard)}.`);
         res.status(400).json({ error: 'Je kunt deze kaart niet spelen. De waarde of het symbool moet overeenkomen met de aflegstapel, of het moet een 8 zijn.' });
     }
 });
