@@ -15,46 +15,9 @@ const pool = new Pool({
     }
 });
 
-let games = {};
-
-// Functie om een nieuw deck te maken en te schudden
-const createDeck = () => {
-    const suits = ['♥', '♦', '♣', '♠'];
-    const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-    let deck = [];
-    for (let suit of suits) {
-        for (let value of values) {
-            deck.push({ value, suit });
-        }
-    }
-    // Schud het deck
-    for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-    return deck;
-};
-
-// Functie om de game state te initialiseren
-const initializeGameState = (gameId, players) => {
-    let deck = createDeck();
-    let hands = {};
-    for (const player of players) {
-        hands[player.player_id] = deck.splice(0, 7);
-    }
-    games[gameId] = {
-        players: players.map(p => p.player_id),
-        hands: hands,
-        discard_pile: [deck.pop()],
-        draw_pile: deck,
-        current_turn: players[0].player_id,
-        status_message: `${players[0].player_id} is aan de beurt.`,
-    };
-};
-
 // GET-route om de serverstatus te controleren
-app.get('/status', (req, res) => {
-    res.json({ status: 'ok' });
+app.get('/', (req, res) => {
+    res.send('Server draait.');
 });
 
 // GET-route voor alle games (voor de lobby)
@@ -63,23 +26,8 @@ app.get('/games', async (req, res) => {
         const result = await pool.query('SELECT game_id, player_host FROM games WHERE is_started = false');
         res.json(result.rows);
     } catch (err) {
-        console.error('Fout bij het ophalen van games:', err.message);
+        console.error(err);
         res.status(500).send('Fout bij het ophalen van games. Controleer de serverlogs.');
-    }
-});
-
-// GET-route om de startstatus van een spel te controleren
-app.get('/games/:game_id/status', async (req, res) => {
-    const { game_id } = req.params;
-    try {
-        const result = await pool.query('SELECT is_started FROM games WHERE game_id = $1', [game_id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Spel niet gevonden.' });
-        }
-        res.json({ is_started: result.rows[0].is_started });
-    } catch (err) {
-        console.error('Fout bij het ophalen van de spelstatus:', err.message);
-        res.status(500).json({ error: 'Fout bij het ophalen van de spelstatus. Controleer de server.' });
     }
 });
 
@@ -90,50 +38,81 @@ app.post('/games', async (req, res) => {
         const client = await pool.connect();
         await client.query('BEGIN');
         
-        await client.query('INSERT INTO games (game_id, player_host, is_started) VALUES ($1, $2, false)', [game_id, player_host]);
+        await client.query('INSERT INTO games (game_id, player_host, current_turn) VALUES ($1, $2, $3)', [game_id, player_host, player_host]);
         await client.query('INSERT INTO game_players (game_id, player_id) VALUES ($1, $2)', [game_id, player_host]);
 
+        const deckResult = await client.query('INSERT INTO decks (game_id) VALUES ($1) RETURNING deck_id', [game_id]);
+        const deck_id = deckResult.rows[0].deck_id;
+
+        const suits = ['h', 'd', 'c', 's'];
+        const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'j', 'q', 'k', 'a'];
+        const cards = [];
+        for (const suit of suits) {
+            for (const value of values) {
+                cards.push(value + suit);
+            }
+        }
+        // Voeg Jokers toe
+        cards.push('jo1', 'jo2');
+
+        for (let i = 0; i < cards.length; i++) {
+            await client.query('INSERT INTO deck_cards (deck_id, card_value, card_order) VALUES ($1, $2, $3)', [deck_id, cards[i], i]);
+        }
+        
         await client.query('COMMIT');
-        client.release();
-        res.status(201).json({ message: 'Spel succesvol aangemaakt', game_id: game_id });
-    } catch (err) {
-        console.error('Fout bij het aanmaken van het spel:', err.message);
-        res.status(500).json({ error: 'Fout bij het aanmaken van het spel. Controleer de server.' });
+        res.status(201).json({ message: 'Game aangemaakt', gameId: game_id });
+
+    } catch (error) {
+        if (client) {
+            await client.query('ROLLBACK');
+        }
+        console.error('Fout bij het aanmaken van game:', error);
+        res.status(500).json({ error: 'Fout bij het aanmaken van game.' });
+    } finally {
+        if (client) {
+            client.release();
+        }
     }
 });
 
-// POST-route om een speler toe te voegen aan een bestaand spel
+// POST-route om een speler aan een game toe te voegen
 app.post('/games/:game_id/players', async (req, res) => {
     const { game_id } = req.params;
     const { player_id } = req.body;
-    
     try {
-        const gameCheck = await pool.query('SELECT is_started FROM games WHERE game_id = $1', [game_id]);
-        if (gameCheck.rows.length === 0) {
-            return res.status(404).json({ error: 'Spel niet gevonden.' });
+        const result = await pool.query('INSERT INTO game_players (game_id, player_id) VALUES ($1, $2) ON CONFLICT (game_id, player_id) DO NOTHING', [game_id, player_id]);
+        if (result.rowCount === 0) {
+            res.status(200).json({ message: 'Speler bestaat al.' });
+        } else {
+            res.status(201).json({ message: 'Speler toegevoegd.' });
         }
-        if (gameCheck.rows[0].is_started) {
-            return res.status(400).json({ error: 'Spel is al gestart. U kunt niet deelnemen.' });
-        }
-
-        await pool.query('INSERT INTO game_players (game_id, player_id) VALUES ($1, $2)', [game_id, player_id]);
-        
-        res.status(201).json({ message: 'Speler succesvol toegevoegd aan de lobby.' });
-    } catch (err) {
-        console.error('Fout bij het toevoegen van speler:', err.message);
-        res.status(500).json({ error: 'Fout bij het toevoegen van speler. Controleer de server.' });
+    } catch (error) {
+        console.error('Fout bij het toevoegen van speler:', error);
+        res.status(500).json({ error: 'Fout bij het toevoegen van speler.' });
     }
 });
 
-// GET-route om spelers in een lobby te krijgen
+// GET-route om de spelers van een game op te halen
 app.get('/games/:game_id/players', async (req, res) => {
     const { game_id } = req.params;
     try {
-        const result = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1', [game_id]);
+        const result = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1 ORDER BY player_join_date', [game_id]);
         res.json(result.rows);
     } catch (err) {
-        console.error('Fout bij het ophalen van spelers:', err.message);
+        console.error('Fout bij het ophalen van spelers:', err);
         res.status(500).json({ error: 'Fout bij het ophalen van spelers. Controleer de server.' });
+    }
+});
+
+// GET-route om de hand van een speler op te halen
+app.get('/games/:game_id/players/:player_id/hand', async (req, res) => {
+    const { game_id, player_id } = req.params;
+    try {
+        const result = await pool.query('SELECT card_value FROM player_cards WHERE game_id = $1 AND player_id = $2', [game_id, player_id]);
+        res.json({ cards: result.rows.map(row => row.card_value) });
+    } catch (err) {
+        console.error('Fout bij het ophalen van de hand:', err);
+        res.status(500).json({ error: 'Fout bij het ophalen van de hand.' });
     }
 });
 
@@ -148,150 +127,183 @@ app.post('/games/:game_id/start', async (req, res) => {
             return res.status(403).json({ error: 'Alleen de host kan het spel starten.' });
         }
         
-        const playersCheck = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1', [game_id]);
-        const players = playersCheck.rows;
-        if (players.length < 2) {
-            return res.status(400).json({ error: 'Niet genoeg spelers om te starten. Minimaal 2 spelers nodig.' });
+        const playersResult = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1 ORDER BY player_join_date', [game_id]);
+        const players = playersResult.rows.map(row => row.player_id);
+        const playerCount = players.length;
+        if (playerCount < 3 || playerCount > 7) {
+            return res.status(400).json({ error: 'Ongeldig aantal spelers. Minimaal 3, maximaal 7.' });
         }
 
-        await pool.query('UPDATE games SET is_started = true WHERE game_id = $1', [game_id]);
+        // Bepaal het aantal rondes
+        const totalRounds = 52 / playerCount;
+
+        // Bepaal de ronde-reeks (1 tot max en terug)
+        const roundSequence = [];
+        for (let i = 1; i <= totalRounds; i++) {
+            roundSequence.push(i);
+        }
+        for (let i = totalRounds - 1; i >= 1; i--) {
+            roundSequence.push(i);
+        }
         
-        // Initialiseer de game state in-memory
-        initializeGameState(game_id, players);
+        await pool.query('UPDATE games SET is_started = true, current_round = 1, round_sequence = $1 WHERE game_id = $2', [JSON.stringify(roundSequence), game_id]);
+        
+        // Start de eerste ronde
+        await startNewRound(game_id, players, 1);
+        
+        res.json({ message: 'Spel gestart', firstCard: null }); // De eerste kaart wordt nu in de ronde gezet, niet hier.
 
-        res.json({ message: 'Spel succesvol gestart.' });
-    } catch (err) {
-        console.error('Fout bij het starten van het spel:', err.message);
-        res.status(500).json({ error: 'Fout bij het starten van het spel. Controleer de server.' });
+    } catch (error) {
+        console.error('Fout bij het starten van game:', error);
+        res.status(500).json({ error: 'Fout bij het starten van game.' });
     }
 });
 
-// GET-route om de game state op te halen
-app.get('/games/:game_id/state/:player_id', async (req, res) => {
-    const { game_id, player_id } = req.params;
-    const gameState = games[game_id];
-    
-    if (!gameState) {
-        return res.status(404).json({ error: 'Spel niet gevonden.' });
-    }
-    
-    const isMyTurn = gameState.current_turn === player_id;
-    
-    res.json({
-        current_player: gameState.current_turn,
-        status_message: gameState.status_message,
-        discard_pile_top: gameState.discard_pile[gameState.discard_pile.length - 1],
-        hand: gameState.hands[player_id],
-        is_my_turn: isMyTurn
-    });
-});
+// Functie om een nieuwe ronde te starten
+async function startNewRound(game_id, players, roundNumber) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // Schud de aflegstapel en maak een nieuwe trekstapel
+        await client.query(`
+            INSERT INTO deck_cards (deck_id, card_value, card_order)
+            SELECT deck_id, card_value, (random() * 10000)::integer
+            FROM discard_pile
+            WHERE game_id = $1
+            ON CONFLICT (deck_id, card_value) DO NOTHING;
+        `, [game_id]);
+        await client.query('DELETE FROM discard_pile WHERE game_id = $1', [game_id]);
 
-// POST-route om een kaart te spelen
-app.post('/games/:game_id/play_card', async (req, res) => {
-    const { game_id } = req.params;
-    const { player_id, card } = req.body;
-    
-    const gameState = games[game_id];
-    if (!gameState) {
-        console.error(`404: Spel met ID ${game_id} niet gevonden in in-memory state.`);
-        return res.status(404).json({ error: 'Spel niet gevonden.' });
-    }
-    if (gameState.current_turn !== player_id) {
-        console.error(`400: Het is niet de beurt van ${player_id}. Huidige beurt is van ${gameState.current_turn}.`);
-        return res.status(400).json({ error: 'Het is niet jouw beurt.' });
-    }
+        // Verwijder kaarten uit de handen van spelers en hun gokken
+        await client.query('DELETE FROM player_cards WHERE game_id = $1', [game_id]);
+        await client.query('DELETE FROM player_bets WHERE game_id = $1', [game_id]);
 
-    const topCard = gameState.discard_pile[gameState.discard_pile.length - 1];
-    
-    console.log(`Poging om kaart te spelen:`, { player: player_id, card, topCard });
-    
-    // Check if the card can be played (same suit or same value)
-    if (card.suit === topCard.suit || card.value === topCard.value || card.value === '8') {
-        // Verwijder de kaart uit de hand van de speler
-        const hand = gameState.hands[player_id];
-        const cardIndex = hand.findIndex(c => c.value === card.value && c.suit === card.suit);
-        if (cardIndex > -1) {
-            hand.splice(cardIndex, 1);
-            // Voeg de kaart toe aan de aflegstapel
-            gameState.discard_pile.push(card);
-            
-            // Logica voor de volgende beurt
-            const currentPlayerIndex = gameState.players.indexOf(player_id);
-            const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.length;
-            gameState.current_turn = gameState.players[nextPlayerIndex];
-            gameState.status_message = `Kaart gespeeld. Nu is ${gameState.current_turn} aan de beurt.`;
-            console.log(`Kaart succesvol gespeeld. Nieuwe beurt voor: ${gameState.current_turn}`);
-
-            // Stuur de bijgewerkte state naar de client
-            res.json({ message: 'Kaart succesvol gespeeld.', gameState });
-        } else {
-            console.error(`400: Kaart ${JSON.stringify(card)} niet gevonden in de hand van ${player_id}.`);
-            res.status(400).json({ error: 'Deze kaart zit niet in je hand.' });
+        // Deel kaarten uit voor de nieuwe ronde
+        for (const player of players) {
+            for (let i = 0; i < roundNumber; i++) {
+                await client.query(`
+                    WITH drawn AS (
+                        DELETE FROM deck_cards
+                        WHERE deck_id = (SELECT deck_id FROM decks WHERE game_id = $1)
+                        AND card_order = (SELECT MIN(card_order) FROM deck_cards WHERE deck_id = (SELECT deck_id FROM decks WHERE game_id = $1))
+                        RETURNING card_value
+                    )
+                    INSERT INTO player_cards (game_id, player_id, card_value)
+                    SELECT $1, $2, drawn.card_value
+                    FROM drawn;
+                `, [game_id, player]);
+            }
         }
-    } else {
-        console.error(`400: Kaart ${JSON.stringify(card)} kan niet worden gespeeld op ${JSON.stringify(topCard)}.`);
-        res.status(400).json({ error: 'Je kunt deze kaart niet spelen. De waarde of het symbool moet overeenkomen met de aflegstapel, of het moet een 8 zijn.' });
+        
+        // Bepaal een nieuwe troefkaart
+        const trumpCardResult = await client.query(`
+            WITH drawn AS (
+                DELETE FROM deck_cards
+                WHERE deck_id = (SELECT deck_id FROM decks WHERE game_id = $1)
+                AND card_order = (SELECT MIN(card_order) FROM deck_cards WHERE deck_id = (SELECT deck_id FROM decks WHERE game_id = $1))
+                RETURNING card_value
+            )
+            SELECT card_value FROM drawn;
+        `, [game_id]);
+        const trumpCard = trumpCardResult.rows[0].card_value;
+        
+        await client.query('UPDATE games SET current_round = $1, trump_card = $2, current_turn = $3 WHERE game_id = $4', [roundNumber, trumpCard, players[0], game_id]);
+        
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Fout bij het starten van nieuwe ronde:', error);
+    } finally {
+        client.release();
     }
-});
+}
 
-// POST-route om een kaart te trekken
-app.post('/games/:game_id/draw_card', async (req, res) => {
+// GET-route om de gamestatus op te halen
+app.get('/games/:game_id/status', async (req, res) => {
     const { game_id } = req.params;
-    const { player_id } = req.body;
+    try {
+        const gameStatusResult = await pool.query('SELECT * FROM games WHERE game_id = $1', [game_id]);
+        const game = gameStatusResult.rows[0];
 
-    const gameState = games[game_id];
-    if (!gameState || gameState.current_turn !== player_id) {
-        return res.status(400).json({ error: 'Het is niet jouw beurt.' });
-    }
-
-    // Pak een kaart van de trekstapel
-    const card = gameState.draw_pile.pop();
-    if (!card) {
-        // Shuffle discard pile to create a new draw pile
-        const discardTop = gameState.discard_pile.pop();
-        gameState.draw_pile = gameState.discard_pile;
-        gameState.discard_pile = [discardTop];
-        const newDeck = gameState.draw_pile;
-        for (let i = newDeck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
+        if (!game) {
+            return res.status(404).json({ error: 'Game niet gevonden.' });
         }
-        gameState.draw_pile = newDeck;
-        const newCard = gameState.draw_pile.pop();
-        gameState.hands[player_id].push(newCard);
-        gameState.status_message = `${player_id} heeft een kaart getrokken. Trekstapel gereshuffeld.`;
-    } else {
-        gameState.hands[player_id].push(card);
-        gameState.status_message = `${player_id} heeft een kaart getrokken.`;
-    }
-    
-    // Ga naar de volgende beurt na het trekken
-    const currentPlayerIndex = gameState.players.indexOf(player_id);
-    const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.length;
-    gameState.current_turn = gameState.players[nextPlayerIndex];
 
-    res.json({ message: 'Kaart succesvol getrokken.', gameState });
+        const playersResult = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1 ORDER BY player_join_date', [game_id]);
+        const players = playersResult.rows.map(row => row.player_id);
+
+        res.json({
+            isStarted: game.is_started,
+            currentRound: game.current_round,
+            trumpCard: game.trump_card,
+            currentTurn: game.current_turn,
+            players: players,
+            winnerId: game.winner_id,
+            totalRounds: game.round_sequence ? JSON.parse(game.round_sequence).length : 0,
+            roundNumber: game.current_round
+        });
+
+    } catch (error) {
+        console.error('Fout bij het ophalen van gamestatus:', error);
+        res.status(500).json({ error: 'Fout bij het ophalen van gamestatus.' });
+    }
 });
 
-// POST-route om de beurt te beëindigen
-app.post('/games/:game_id/end_turn', async (req, res) => {
+
+// POST-route om een gok te plaatsen
+app.post('/games/:game_id/bet', async (req, res) => {
     const { game_id } = req.params;
-    const { player_id } = req.body;
+    const { player_id, bet_amount } = req.body;
+    try {
+        const client = await pool.connect();
+        await client.query('BEGIN');
+        
+        const turnCheck = await client.query('SELECT current_turn, current_round FROM games WHERE game_id = $1', [game_id]);
+        if (turnCheck.rows.length === 0 || turnCheck.rows[0].current_turn !== player_id) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: 'Het is niet jouw beurt.' });
+        }
+        
+        const currentRound = turnCheck.rows[0].current_round;
+        if (bet_amount > currentRound || bet_amount < 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: `Ongeldige gok. De gok moet tussen 0 en ${currentRound} liggen.` });
+        }
+        
+        await client.query('INSERT INTO player_bets (game_id, player_id, bet_amount) VALUES ($1, $2, $3)', [game_id, player_id, bet_amount]);
 
-    const gameState = games[game_id];
-    if (!gameState || gameState.current_turn !== player_id) {
-        return res.status(400).json({ error: 'Het is niet jouw beurt.' });
+        const playersResult = await client.query('SELECT player_id FROM game_players WHERE game_id = $1 ORDER BY player_join_date', [game_id]);
+        const players = playersResult.rows.map(row => row.player_id);
+        const currentPlayerIndex = players.indexOf(player_id);
+        const nextPlayer = players[(currentPlayerIndex + 1) % players.length];
+
+        await client.query('UPDATE games SET current_turn = $1 WHERE game_id = $2', [nextPlayer, game_id]);
+        
+        // Controleer of iedereen gegokt heeft
+        const betsCountResult = await client.query('SELECT COUNT(*) FROM player_bets WHERE game_id = $1', [game_id]);
+        if (parseInt(betsCountResult.rows[0].count, 10) === players.length) {
+             // Begin de ronde (in een latere implementatie)
+             console.log("Gokfase afgerond. Start de ronde.");
+        }
+
+        await client.query('COMMIT');
+        res.status(200).json({ message: 'Gok geplaatst.', nextTurn: nextPlayer });
+
+    } catch (error) {
+        if (client) {
+            await client.query('ROLLBACK');
+        }
+        console.error('Fout bij het plaatsen van gok:', error);
+        res.status(500).json({ error: 'Fout bij het plaatsen van gok.' });
+    } finally {
+        if (client) {
+            client.release();
+        }
     }
-
-    // Ga naar de volgende beurt
-    const currentPlayerIndex = gameState.players.indexOf(player_id);
-    const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.length;
-    gameState.current_turn = gameState.players[nextPlayerIndex];
-    gameState.status_message = `${player_id} heeft zijn beurt beëindigd. Nu is ${gameState.current_turn} aan de beurt.`;
-
-    res.json({ message: 'Beurt succesvol beëindigd.', gameState });
 });
+
 
 app.listen(port, () => {
-    console.log(`Server draait op poort ${port}`);
+    console.log(`Server draait op http://localhost:${port}`);
 });

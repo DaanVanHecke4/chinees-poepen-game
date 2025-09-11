@@ -4,305 +4,262 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chinees Poepen</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #e2e8f0;
-        }
-        .card-container {
-            width: 80px;
-            height: 110px;
-            background-color: white;
-            border: 1px solid #000;
-            border-radius: 8px;
+            font-family: Arial, sans-serif;
             display: flex;
-            flex-direction: column;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 400px;
+        }
+        input, button {
+            width: 100%;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            box-sizing: border-box;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        #game-lobby-container, #game-container, #winner-container, #betting-container, #round-info-container {
+            display: none;
+        }
+        .card-pile {
+            margin: 1rem 0;
+            padding: 1rem;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .card-pile h3 {
+            margin-top: 0;
+        }
+        .card {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            margin: 0.25rem;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+        }
+        .active-turn {
+            border: 2px solid #28a745;
+        }
+        .player-info {
             font-weight: bold;
-            padding: 8px;
-            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            margin-bottom: 0.5rem;
         }
-        .card-value {
-            font-size: 1.5rem;
-        }
-        .card-suit {
-            font-size: 1rem;
+        #top-discard-card {
+            font-size: 2em;
+            font-weight: bold;
+            text-align: center;
+            width: 100%;
+            display: inline-block;
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+<body>
+    <div class="container" id="main-container">
+        <!-- Startscherm -->
+        <div id="start-screen">
+            <h1>Chinees Poepen</h1>
+            <input type="text" id="player-name-input" placeholder="Je naam">
+            <button id="create-game-btn">Nieuw spel maken</button>
+            <button id="show-join-btn">Deelnemen aan spel</button>
+        </div>
 
-    <!-- Welkomstscherm -->
-    <div id="welcome-screen" class="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm text-center">
-        <h2 class="text-2xl font-bold mb-4">Welkom bij Chinees Poepen</h2>
-        <p id="connection-status" class="mb-4 text-gray-600">Verbinding maken met de server...</p>
-        <input type="text" id="player-name-input" placeholder="Je naam" class="p-3 mb-3 w-full border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
-        <button id="create-game-btn" class="p-3 w-full bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors duration-200">Nieuw Spel Maken</button>
-        <input type="text" id="game-id-input" placeholder="Spel ID" class="p-3 mt-4 w-full border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
-        <button id="join-game-btn" class="p-3 mt-2 w-full bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200">Deelnemen aan Spel</button>
-        <p id="error-message" class="text-red-500 mt-4"></p>
-    </div>
-
-    <!-- Lobby scherm -->
-    <div id="game-lobby-container" class="hidden bg-white p-8 rounded-xl shadow-lg w-full max-w-sm text-center">
-        <h2 class="text-2xl font-bold mb-4">Spel Lobby</h2>
-        <p class="text-lg mb-2">Spel ID: <span id="lobby-game-id" class="font-bold"></span></p>
-        <p>Spelers in de lobby:</p>
-        <ul id="lobby-players" class="list-none p-0 mb-4"></ul>
-        <button id="start-game-btn" class="p-3 w-full bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors duration-200 hidden">Spel Starten</button>
-    </div>
-
-    <!-- Spelscherm -->
-    <div id="game-screen" class="hidden w-full max-w-4xl flex flex-col items-center p-4">
-        <div id="game-status" class="mb-4 text-center">
-            <p class="text-lg font-bold mb-2">Huidige beurt: <span id="current-player-display"></span></p>
-            <p id="player-status-message" class="text-sm text-gray-600"></p>
+        <!-- Deelnemen scherm -->
+        <div id="join-game-screen" style="display: none;">
+            <h2>Deelnemen aan spel</h2>
+            <input type="text" id="join-player-name-input" placeholder="Je naam">
+            <input type="text" id="game-id-input" placeholder="Spel ID">
+            <button id="join-game-btn">Deelnemen</button>
+            <p id="error-message" style="color: red;"></p>
         </div>
         
-        <div class="flex space-x-8 mb-8">
-            <!-- Aflegstapel -->
-            <div id="discard-pile" class="flex flex-col items-center">
-                <p class="font-bold mb-2">Afgelegde stapel</p>
-                <div class="card-container bg-gray-300" id="discard-top-card">
-                    <!-- Aflegstapel kaart wordt hier weergegeven -->
-                </div>
-            </div>
-
-            <!-- Trekstapel -->
-            <div id="draw-pile" class="flex flex-col items-center">
-                <p class="font-bold mb-2">Trekstapel</p>
-                <div class="card-container bg-gray-500 text-white">
-                    <p>Poepen</p>
-                </div>
-            </div>
+        <!-- Spel Lobby -->
+        <div id="game-lobby-container">
+            <h2>Spel Lobby</h2>
+            <p>Spel ID: <span id="lobby-game-id"></span></p>
+            <ul id="player-list"></ul>
+            <button id="start-game-btn">Spel starten</button>
+            <p id="lobby-message" style="color: red;"></p>
         </div>
 
-        <!-- Spelershand -->
-        <div id="player-hand-container" class="w-full flex flex-col items-center mt-auto">
-            <h3 class="text-xl font-bold mb-4">Jouw Hand</h3>
-            <div id="player-hand" class="flex flex-wrap justify-center gap-4">
-                <!-- Spelerskaarten worden hier weergegeven -->
+        <!-- Ronde informatie scherm -->
+        <div id="round-info-container">
+            <h2>Ronde <span id="round-number-display"></span></h2>
+            <p>Troefkaart: <span id="trump-card-display"></span></p>
+            <div class="card-pile">
+                <h3>Jouw Hand</h3>
+                <div id="player-hand-container-round"></div>
             </div>
-            <div id="game-buttons" class="mt-8 flex gap-4">
-                <button id="draw-card-btn" class="p-3 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors duration-200">Trek Kaart</button>
-                <button id="end-turn-btn" class="p-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 hidden">Eindig Beurt</button>
+            <button id="go-to-betting-btn">Start met gokken</button>
+        </div>
+
+        <!-- Gokscherm -->
+        <div id="betting-container">
+            <h2>Gokfase</h2>
+            <p>Ronde: <span id="betting-round-number"></span> slagen</p>
+            <p>Aan de beurt: <span id="betting-turn-info"></span></p>
+            <input type="number" id="bet-input" min="0">
+            <button id="place-bet-btn">Plaats gok</button>
+        </div>
+
+        <!-- Spel Scherm (wordt later gebruikt voor slagen) -->
+        <div id="game-container">
+            <h2>Het spel is gestart!</h2>
+            <div id="current-turn-info"></div>
+            
+            <div class="card-pile">
+                <h3>Aflegstapel</h3>
+                <div id="top-discard-card"></div>
             </div>
+
+            <div class="card-pile">
+                <h3>Jouw Hand</h3>
+                <div id="player-hand-container"></div>
+            </div>
+            
+            <button id="draw-card-btn">Trek een kaart</button>
+        </div>
+        
+        <!-- Winnaar Scherm -->
+        <div id="winner-container">
+            <h2>Spel voorbij!</h2>
+            <p id="winner-name-display"></p>
+            <button id="new-game-btn">Speel opnieuw</button>
         </div>
     </div>
-    
+
     <script>
-        const SERVER_URL = 'https://chinees-poepen-game.onrender.com';
-        
+        const SERVER_URL = 'http://localhost:3000'; 
         let currentPlayerId = '';
         let currentGameId = '';
-        let pollInterval = null;
+        let pollInterval;
+        let gameStatusInterval;
 
-        const welcomeScreen = document.getElementById('welcome-screen');
+        const startScreen = document.getElementById('start-screen');
+        const joinGameScreen = document.getElementById('join-game-screen');
         const gameLobbyContainer = document.getElementById('game-lobby-container');
-        const gameScreen = document.getElementById('game-screen');
-        const createGameBtn = document.getElementById('create-game-btn');
-        const joinGameBtn = document.getElementById('join-game-btn');
-        const startBtn = document.getElementById('start-game-btn');
+        const roundInfoContainer = document.getElementById('round-info-container');
+        const bettingContainer = document.getElementById('betting-container');
+        const gameContainer = document.getElementById('game-container');
+        const winnerContainer = document.getElementById('winner-container');
+
         const playerNameInput = document.getElementById('player-name-input');
+        const createGameBtn = document.getElementById('create-game-btn');
+        const showJoinBtn = document.getElementById('show-join-btn');
+        const joinPlayerNameInput = document.getElementById('join-player-name-input');
         const gameIdInput = document.getElementById('game-id-input');
-        const lobbyGameIdSpan = document.getElementById('lobby-game-id');
-        const lobbyPlayersList = document.getElementById('lobby-players');
+        const joinGameBtn = document.getElementById('join-game-btn');
         const errorMessage = document.getElementById('error-message');
-        const currentPlayerDisplay = document.getElementById('current-player-display');
-        const playerStatusMessage = document.getElementById('player-status-message');
-        const discardTopCard = document.getElementById('discard-top-card');
-        const playerHand = document.getElementById('player-hand');
-        const drawCardBtn = document.getElementById('draw-card-btn');
-        const endTurnBtn = document.getElementById('end-turn-btn');
-        const connectionStatus = document.getElementById('connection-status');
+        const lobbyGameIdSpan = document.getElementById('lobby-game-id');
+        const playerList = document.getElementById('player-list');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const roundNumberDisplay = document.getElementById('round-number-display');
+        const trumpCardDisplay = document.getElementById('trump-card-display');
+        const playerHandContainerRound = document.getElementById('player-hand-container-round');
+        const bettingRoundNumber = document.getElementById('betting-round-number');
+        const bettingTurnInfo = document.getElementById('betting-turn-info');
+        const betInput = document.getElementById('bet-input');
+        const placeBetBtn = document.getElementById('place-bet-btn');
+        const goToBettingBtn = document.getElementById('go-to-betting-btn');
 
-        const showScreen = (screenId) => {
-            document.querySelectorAll('body > div').forEach(div => div.classList.add('hidden'));
-            document.getElementById(screenId).classList.remove('hidden');
-        };
+        function showScreen(screenId) {
+            startScreen.style.display = 'none';
+            joinGameScreen.style.display = 'none';
+            gameLobbyContainer.style.display = 'none';
+            roundInfoContainer.style.display = 'none';
+            bettingContainer.style.display = 'none';
+            gameContainer.style.display = 'none';
+            winnerContainer.style.display = 'none';
+            document.getElementById(screenId).style.display = 'block';
+        }
 
-        const checkServerStatus = async () => {
+        async function updateLobby() {
             try {
-                const response = await fetch(`${SERVER_URL}/status`);
-                if (response.ok) {
-                    connectionStatus.textContent = 'Verbonden met de server!';
-                    connectionStatus.classList.remove('text-gray-600', 'text-red-500');
-                    connectionStatus.classList.add('text-green-500');
-                } else {
-                    connectionStatus.textContent = 'Fout bij het verbinden met de server.';
-                    connectionStatus.classList.remove('text-gray-600', 'text-green-500');
-                    connectionStatus.classList.add('text-red-500');
-                }
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/players`);
+                const players = await response.json();
+                playerList.innerHTML = players.map(p => `<li>${p.player_id}</li>`).join('');
             } catch (error) {
-                connectionStatus.textContent = 'Fout bij het verbinden met de server.';
-                connectionStatus.classList.remove('text-gray-600', 'text-green-500');
-                connectionStatus.classList.add('text-red-500');
+                console.error('Fout bij het ophalen van spelers:', error);
             }
-        };
+        }
 
-        const updateLobby = async () => {
+        async function updateGameStatus() {
             try {
-                const gameStatusResponse = await fetch(`${SERVER_URL}/games/${currentGameId}/status`);
-                const gameStatus = await gameStatusResponse.json();
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/status`);
+                const status = await response.json();
                 
-                if (gameStatus.is_started) {
-                    clearInterval(pollInterval);
-                    showScreen('game-screen');
-                    pollInterval = setInterval(pollGameState, 3000);
+                if (status.winnerId) {
+                    clearInterval(gameStatusInterval);
+                    winnerNameDisplay.textContent = `De winnaar is: ${status.winnerId}!`;
+                    showScreen('winner-container');
                     return;
                 }
 
-                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/players`);
-                const players = await response.json();
-                
-                lobbyPlayersList.innerHTML = '';
-                if (Array.isArray(players)) {
-                    players.forEach(player => {
-                        const li = document.createElement('li');
-                        li.textContent = player.player_id;
-                        li.classList.add('p-2', 'bg-gray-200', 'rounded-lg', 'mb-2');
-                        lobbyPlayersList.appendChild(li);
-                    });
-                }
-            } catch (error) {
-                console.error('Fout bij het updaten van de lobby:', error);
-            }
-        };
-
-        const startGame = async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/start`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_id: currentPlayerId })
-                });
-
-                if (response.status === 200) {
-                    showScreen('game-screen');
+                if (status.isStarted && status.currentTurn !== null) {
                     clearInterval(pollInterval);
-                    pollInterval = setInterval(pollGameState, 3000);
-                } else {
-                    const errorData = await response.json();
-                    errorMessage.textContent = errorData.error;
+                    
+                    // Schakel over naar het juiste scherm
+                    if (status.currentRound > 0) {
+                        showScreen('round-info-container');
+                        roundNumberDisplay.textContent = status.currentRound;
+                        trumpCardDisplay.textContent = status.trumpCard;
+
+                        // Haal de hand van de speler op
+                        const handResponse = await fetch(`${SERVER_URL}/games/${currentGameId}/players/${currentPlayerId}/hand`);
+                        const hand = await handResponse.json();
+                        playerHandContainerRound.innerHTML = hand.cards.map(card => `<div class="card">${card}</div>`).join('');
+                    } else {
+                        // Spel is gestart, maar de ronde moet nog beginnen
+                        // Dit is het "tussenronde" scherm, of de start van de gokfase
+                        showScreen('betting-container');
+                        bettingRoundNumber.textContent = status.roundNumber;
+                        bettingTurnInfo.textContent = status.currentTurn;
+                        betInput.disabled = status.currentTurn !== currentPlayerId;
+                        placeBetBtn.disabled = status.currentTurn !== currentPlayerId;
+                    }
+
                 }
             } catch (error) {
-                console.error('Fout bij het starten van het spel:', error);
-                errorMessage.textContent = 'Fout bij het starten van het spel. Controleer de server.';
+                console.error('Fout bij het updaten van de gamestatus:', error);
             }
-        };
+        }
 
-        const pollGameState = async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/state/${currentPlayerId}`);
-                if (response.status === 200) {
-                    const gameState = await response.json();
-                    updateGameUI(gameState);
-                } else {
-                    const errorData = await response.json();
-                    console.error('Fout bij het pollen van de spelstatus:', errorData.error);
-                }
-            } catch (error) {
-                console.error('Fout bij het pollen van de spelstatus:', error);
-            }
-        };
-
-        const updateGameUI = (gameState) => {
-            // Update UI elementen met de ontvangen spelstatus
-            currentPlayerDisplay.textContent = gameState.current_player;
-            playerStatusMessage.textContent = gameState.status_message;
-
-            // Toon de aflegkaart
-            const topCard = gameState.discard_pile_top;
-            if (topCard) {
-                discardTopCard.innerHTML = `<p class="card-value">${topCard.value}</p><p class="card-suit">${topCard.suit}</p>`;
-            } else {
-                discardTopCard.innerHTML = '';
-            }
-
-            // Update de speler's hand
-            playerHand.innerHTML = '';
-            if (Array.isArray(gameState.hand)) {
-                gameState.hand.forEach(card => {
-                    const cardDiv = document.createElement('div');
-                    cardDiv.classList.add('card-container', 'cursor-pointer');
-                    cardDiv.innerHTML = `<p class="card-value">${card.value}</p><p class="card-suit">${card.suit}</p>`;
-                    cardDiv.addEventListener('click', () => playCard(card));
-                    playerHand.appendChild(cardDiv);
-                });
-            }
-
-            // Toon of verberg de juiste knoppen
-            const isMyTurn = gameState.current_player === currentPlayerId;
-            drawCardBtn.disabled = !isMyTurn;
-            endTurnBtn.classList.toggle('hidden', !isMyTurn);
-        };
-
-        const playCard = async (card) => {
-            try {
-                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/play_card`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_id: currentPlayerId, card: card })
-                });
-                if (response.status === 200) {
-                    pollGameState();
-                } else {
-                    const errorData = await response.json();
-                    playerStatusMessage.textContent = errorData.error;
-                }
-            } catch (error) {
-                playerStatusMessage.textContent = 'Fout bij het spelen van de kaart.';
-            }
-        };
-
-        drawCardBtn.addEventListener('click', async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/draw_card`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_id: currentPlayerId })
-                });
-                if (response.status === 200) {
-                    pollGameState();
-                } else {
-                    const errorData = await response.json();
-                    playerStatusMessage.textContent = errorData.error;
-                }
-            } catch (error) {
-                playerStatusMessage.textContent = 'Fout bij het trekken van een kaart.';
-            }
-        });
-
-        endTurnBtn.addEventListener('click', async () => {
-            try {
-                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/end_turn`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ player_id: currentPlayerId })
-                });
-                if (response.status === 200) {
-                    pollGameState();
-                } else {
-                    const errorData = await response.json();
-                    playerStatusMessage.textContent = errorData.error;
-                }
-            } catch (error) {
-                playerStatusMessage.textContent = 'Fout bij het beëindigen van de beurt.';
-            }
-        });
-
+        // Event Listeners
         createGameBtn.addEventListener('click', async () => {
             const playerName = playerNameInput.value.trim();
             if (!playerName) {
-                errorMessage.textContent = 'Vul een naam in.';
+                errorMessage.textContent = 'Vul je naam in.';
                 return;
             }
-
-            const gameId = Math.random().toString(36).substring(2, 7);
-            
+            const gameId = Math.random().toString(36).substring(2, 8); // Willekeurig ID
             try {
                 const response = await fetch(`${SERVER_URL}/games`, {
                     method: 'POST',
@@ -315,21 +272,25 @@
                     currentGameId = gameId;
                     showScreen('game-lobby-container');
                     lobbyGameIdSpan.textContent = gameId;
-                    startBtn.classList.remove('hidden');
-                    startBtn.addEventListener('click', startGame);
-                    // Start polling om te controleren of de game start
+                    startGameBtn.style.display = 'block';
+                    updateLobby();
                     pollInterval = setInterval(updateLobby, 3000);
+                    gameStatusInterval = setInterval(updateGameStatus, 3000); // Start de status check
                 } else {
                     const errorData = await response.json();
                     errorMessage.textContent = errorData.error;
                 }
             } catch (error) {
-                errorMessage.textContent = 'Fout bij het aanmaken van het spel. Controleer de server.';
+                errorMessage.textContent = 'Fout bij het aanmaken van game. Controleer de server.';
             }
         });
 
+        showJoinBtn.addEventListener('click', () => {
+            showScreen('join-game-screen');
+        });
+
         joinGameBtn.addEventListener('click', async () => {
-            const playerName = playerNameInput.value.trim();
+            const playerName = joinPlayerNameInput.value.trim();
             const gameId = gameIdInput.value.trim();
             if (!playerName || !gameId) {
                 errorMessage.textContent = 'Vul je naam en het spel ID in.';
@@ -348,8 +309,10 @@
                     currentGameId = gameId;
                     showScreen('game-lobby-container');
                     lobbyGameIdSpan.textContent = gameId;
-                    // Start polling om te controleren of de game start
+                    startGameBtn.style.display = 'none';
+                    updateLobby();
                     pollInterval = setInterval(updateLobby, 3000);
+                    gameStatusInterval = setInterval(updateGameStatus, 3000); // Start de status check
                 } else {
                     const errorData = await response.json();
                     errorMessage.textContent = errorData.error;
@@ -359,7 +322,61 @@
             }
         });
 
-        window.onload = checkServerStatus;
+        startGameBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: currentPlayerId })
+                });
+                const data = await response.json();
+                if (response.status !== 200) {
+                    alert(data.error);
+                } else {
+                    updateGameStatus();
+                }
+            } catch (error) {
+                alert('Fout bij het starten van het spel.');
+            }
+        });
+
+        goToBettingBtn.addEventListener('click', () => {
+            showScreen('betting-container');
+        });
+
+        placeBetBtn.addEventListener('click', async () => {
+            const betAmount = parseInt(betInput.value, 10);
+            if (isNaN(betAmount)) {
+                alert('Voer een geldige gok in.');
+                return;
+            }
+            try {
+                const response = await fetch(`${SERVER_URL}/games/${currentGameId}/bet`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: currentPlayerId, bet_amount: betAmount })
+                });
+                const data = await response.json();
+                if (response.status === 200) {
+                    updateGameStatus();
+                } else {
+                    alert(data.error);
+                }
+            } catch (error) {
+                alert('Fout bij het plaatsen van de gok.');
+            }
+        });
+        
+        // Functie om terug te keren naar het startscherm voor een nieuw spel
+        newGameBtn.addEventListener('click', () => {
+             // Reset alle lokale variabelen
+            currentPlayerId = '';
+            currentGameId = '';
+            clearInterval(pollInterval);
+            clearInterval(gameStatusInterval);
+            // Toon het startscherm
+            showScreen('start-screen');
+        });
     </script>
 </body>
 </html>
