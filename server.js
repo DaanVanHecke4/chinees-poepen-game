@@ -24,6 +24,16 @@ const pool = new Pool({
     }
 });
 
+// Test de databaseverbinding bij het opstarten
+pool.connect()
+    .then(client => {
+        console.log('Succesvol verbonden met de database!');
+        client.release();
+    })
+    .catch(err => {
+        console.error('Fout bij het verbinden met de database:', err.message);
+    });
+
 let games = {};
 
 // Functie om een nieuw deck te maken en te schudden
@@ -72,7 +82,7 @@ app.get('/games', async (req, res) => {
         const result = await pool.query('SELECT game_id, player_host FROM games WHERE is_started = false');
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Fout bij het ophalen van games:', err.message);
         res.status(500).send('Fout bij het ophalen van games. Controleer de serverlogs.');
     }
 });
@@ -91,7 +101,7 @@ app.post('/games', async (req, res) => {
         client.release();
         res.status(201).json({ message: 'Spel succesvol aangemaakt', game_id: game_id });
     } catch (err) {
-        console.error('Fout bij het aanmaken van het spel:', err);
+        console.error('Fout bij het aanmaken van het spel:', err.message);
         res.status(500).json({ error: 'Fout bij het aanmaken van het spel. Controleer de server.' });
     }
 });
@@ -114,7 +124,7 @@ app.post('/games/:game_id/players', async (req, res) => {
         
         res.status(201).json({ message: 'Speler succesvol toegevoegd aan de lobby.' });
     } catch (err) {
-        console.error('Fout bij het toevoegen van speler:', err);
+        console.error('Fout bij het toevoegen van speler:', err.message);
         res.status(500).json({ error: 'Fout bij het toevoegen van speler. Controleer de server.' });
     }
 });
@@ -126,7 +136,7 @@ app.get('/games/:game_id/players', async (req, res) => {
         const result = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1', [game_id]);
         res.json(result.rows);
     } catch (err) {
-        console.error('Fout bij het ophalen van spelers:', err);
+        console.error('Fout bij het ophalen van spelers:', err.message);
         res.status(500).json({ error: 'Fout bij het ophalen van spelers. Controleer de server.' });
     }
 });
@@ -155,7 +165,7 @@ app.post('/games/:game_id/start', async (req, res) => {
 
         res.json({ message: 'Spel succesvol gestart.' });
     } catch (err) {
-        console.error('Fout bij het starten van het spel:', err);
+        console.error('Fout bij het starten van het spel:', err.message);
         res.status(500).json({ error: 'Fout bij het starten van het spel. Controleer de server.' });
     }
 });
