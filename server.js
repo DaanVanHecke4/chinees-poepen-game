@@ -118,6 +118,7 @@ app.post('/games/:game_id/start', async (req, res) => {
     const { player_id } = req.body;
     
     try {
+        console.log(`Startverzoek ontvangen voor spel ${game_id} door speler ${player_id}`);
         const hostCheck = await pool.query('SELECT player_host FROM games WHERE game_id = $1', [game_id]);
         if (hostCheck.rows.length === 0 || hostCheck.rows[0].player_host !== player_id) {
             return res.status(403).json({ error: 'Alleen de host kan het spel starten.' });
@@ -126,7 +127,7 @@ app.post('/games/:game_id/start', async (req, res) => {
         const playersResult = await pool.query('SELECT player_id FROM game_players WHERE game_id = $1', [game_id]);
         const players = playersResult.rows.map(row => row.player_id);
         const playerCount = players.length;
-        // Correctie: check op minimaal 3 spelers
+
         if (playerCount < 3) {
             return res.status(400).json({ error: 'Niet genoeg spelers om te starten. Minimaal 3 spelers nodig.' });
         }
@@ -159,6 +160,7 @@ app.post('/games/:game_id/start', async (req, res) => {
 
         await pool.query('UPDATE games SET is_started = true, game_state = $1 WHERE game_id = $2', [JSON.stringify(game_state), game_id]);
         
+        console.log(`Spel ${game_id} succesvol gestart.`);
         res.json({ message: 'Spel gestart!', game_state });
     } catch (err) {
         console.error('Fout bij het starten van het spel:', err);

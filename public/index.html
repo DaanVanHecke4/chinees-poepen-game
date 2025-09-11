@@ -464,7 +464,7 @@
                     lobbyPlayersList.appendChild(li);
                 });
 
-                // Correctie: Toon knop voor de host als er minimaal 3 spelers zijn
+                // Toon knop voor de host als er minimaal 3 spelers zijn
                 if (isHost && players.length >= 3) {
                     startBtn.style.display = 'block';
                 } else {
@@ -542,6 +542,7 @@
         });
 
         startBtn.addEventListener('click', async () => {
+            console.log('Startknop geklikt, verstuur startverzoek naar server...');
             try {
                 const response = await fetch(`${SERVER_URL}/games/${currentGameId}/start`, {
                     method: 'POST',
@@ -550,16 +551,20 @@
                 });
                 
                 const responseData = await response.json();
+                console.log('Antwoord van de server:', responseData);
 
                 if (response.ok) {
                     clearInterval(pollInterval);
                     showScreen('game-screen');
                     startNewRound(responseData.game_state);
+                    console.log('Spel succesvol gestart.');
                 } else {
-                    errorMessage.textContent = responseData.error;
+                    errorMessage.textContent = responseData.error || 'Onbekende fout bij het starten van het spel.';
+                    console.error('Fout van de server:', responseData.error);
                 }
             } catch (error) {
                 errorMessage.textContent = 'Fout bij het starten van het spel. Controleer de server.';
+                console.error('Netwerk- of serverfout:', error);
             }
         });
         
