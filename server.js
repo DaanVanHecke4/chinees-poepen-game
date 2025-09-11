@@ -113,6 +113,23 @@ app.post('/games/:game_id/start', async (req, res) => {
     }
 });
 
+// NIEUWE GET-route om de startstatus van het spel te controleren
+app.get('/games/:game_id/status', async (req, res) => {
+    const { game_id } = req.params;
+    try {
+        const result = await pool.query('SELECT is_started FROM games WHERE game_id = $1', [game_id]);
+        if (result.rows.length > 0) {
+            res.json({ is_started: result.rows[0].is_started });
+        } else {
+            res.status(404).json({ error: 'Spel niet gevonden.' });
+        }
+    } catch (err) {
+        console.error('Fout bij het ophalen van de spelstatus:', err);
+        res.status(500).json({ error: 'Fout bij het ophalen van de spelstatus. Controleer de server.' });
+    }
+});
+
+
 app.listen(port, () => {
     console.log(`Server draait op poort ${port}`);
 });
