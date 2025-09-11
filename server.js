@@ -1,17 +1,8 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
-const http = require('http');
-const { Server } = require('socket.io');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
 const port = process.env.PORT || 3000;
 
 app.use(cors());
@@ -23,16 +14,6 @@ const pool = new Pool({
         rejectUnauthorized: false
     }
 });
-
-// Test de databaseverbinding bij het opstarten
-pool.connect()
-    .then(client => {
-        console.log('Succesvol verbonden met de database!');
-        client.release();
-    })
-    .catch(err => {
-        console.error('Fout bij het verbinden met de database:', err.message);
-    });
 
 let games = {};
 
@@ -70,6 +51,11 @@ const initializeGameState = (gameId, players) => {
         status_message: `${players[0].player_id} is aan de beurt.`,
     };
 };
+
+// GET-route om de serverstatus te controleren
+app.get('/status', (req, res) => {
+    res.json({ status: 'ok' });
+});
 
 // GET-route om de serverstatus te controleren
 app.get('/', (req, res) => {
@@ -286,6 +272,6 @@ app.post('/games/:game_id/end_turn', async (req, res) => {
     res.json({ message: 'Beurt succesvol beëindigd.', gameState });
 });
 
-server.listen(port, () => {
+app.listen(port, () => {
     console.log(`Server draait op poort ${port}`);
 });

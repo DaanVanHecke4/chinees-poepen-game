@@ -38,7 +38,7 @@
     <!-- Welkomstscherm -->
     <div id="welcome-screen" class="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm text-center">
         <h2 class="text-2xl font-bold mb-4">Welkom bij Chinees Poepen</h2>
-        <p class="mb-4">Voer je naam in om te beginnen.</p>
+        <p id="connection-status" class="mb-4 text-gray-600">Verbinding maken met de server...</p>
         <input type="text" id="player-name-input" placeholder="Je naam" class="p-3 mb-3 w-full border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
         <button id="create-game-btn" class="p-3 w-full bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors duration-200">Nieuw Spel Maken</button>
         <input type="text" id="game-id-input" placeholder="Spel ID" class="p-3 mt-4 w-full border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500">
@@ -117,10 +117,30 @@
         const playerHand = document.getElementById('player-hand');
         const drawCardBtn = document.getElementById('draw-card-btn');
         const endTurnBtn = document.getElementById('end-turn-btn');
+        const connectionStatus = document.getElementById('connection-status');
 
         const showScreen = (screenId) => {
             document.querySelectorAll('body > div').forEach(div => div.classList.add('hidden'));
             document.getElementById(screenId).classList.remove('hidden');
+        };
+
+        const checkServerStatus = async () => {
+            try {
+                const response = await fetch(`${SERVER_URL}/status`);
+                if (response.ok) {
+                    connectionStatus.textContent = 'Verbonden met de server!';
+                    connectionStatus.classList.remove('text-gray-600', 'text-red-500');
+                    connectionStatus.classList.add('text-green-500');
+                } else {
+                    connectionStatus.textContent = 'Fout bij het verbinden met de server.';
+                    connectionStatus.classList.remove('text-gray-600', 'text-green-500');
+                    connectionStatus.classList.add('text-red-500');
+                }
+            } catch (error) {
+                connectionStatus.textContent = 'Fout bij het verbinden met de server.';
+                connectionStatus.classList.remove('text-gray-600', 'text-green-500');
+                connectionStatus.classList.add('text-red-500');
+            }
         };
 
         const updateLobby = async () => {
@@ -327,6 +347,8 @@
                 errorMessage.textContent = 'Fout bij het toevoegen van speler. Controleer de server.';
             }
         });
+
+        window.onload = checkServerStatus;
     </script>
 </body>
 </html>
